@@ -4,7 +4,8 @@
 / refer to https://opensource.org/licenses/BSD-2-Clause
 /------------------------------------------------------*/
 
-#include <stdio.h>
+#include <cstdio>
+#include <cstring>
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
 #include "spdif_rx.h"
@@ -28,6 +29,70 @@ void on_lost_stable_func()
     lost_stable_flg = true;
 }
 
+FRESULT prepare_wav_header(const char *filename, uint32_t sample_rate, uint16_t bits_per_sample)
+{
+    FIL fil;
+    FRESULT fr;     /* FatFs return code */
+    UINT br;
+    UINT bw;
+    const int NUM_CHANNELS = 2;
+    const int BUF_SIZE = 44;
+    uint8_t buf[BUF_SIZE];
+    uint16_t u16;
+    uint32_t u32;
+
+    fr = f_open(&fil, filename, FA_READ | FA_WRITE | FA_CREATE_ALWAYS);
+    if (fr != FR_OK) return fr;
+    fr = f_lseek(&fil, 0);
+    if (fr != FR_OK) return fr;
+    fr = f_truncate(&fil);
+    if (fr != FR_OK) return fr;
+
+    // ChunkID
+    memcpy(&buf[0], "RIFF", 4);
+    // ChunkSize (temporary 0)
+    memset(&buf[4], 0, 4);
+    // Format
+    memcpy(&buf[8], "WAVE", 4);
+
+    // Subchunk1ID
+    memcpy(&buf[12], "fmt ", 4);
+    // Subchunk1Size
+    u32 = 16;  // 16 for PCM
+    memcpy(&buf[16], (const void *) &u32, 4);
+    // AudioFormat
+    u16 = 1;  // PCM = 1
+    memcpy(&buf[20], (const void *) &u16, 2);
+    // NumChannels
+    u16 = 2;  // e.g. Stereo = 2
+    memcpy(&buf[22], (const void *) &u16, 2);
+    // SampleRate
+    u32 = sample_rate;  // e.g. 44100
+    memcpy(&buf[24], (const void *) &u32, 4);
+    // ByteRate
+    u32 = sample_rate * NUM_CHANNELS * bits_per_sample / 8;
+    memcpy(&buf[28], (const void *) &u32, 4);
+    // BlockAlign
+    u16 = NUM_CHANNELS * bits_per_sample / 8;
+    memcpy(&buf[32], (const void *) &u16, 2);
+    // BitsPerSample
+    u16 = bits_per_sample;
+    memcpy(&buf[34], (const void *) &u16, 2);
+
+    // Subchunk2ID
+    memcpy(&buf[36], "data", 4);
+    // Subchunk2Size (temporary 0)
+    memset(&buf[40], 0, 4);
+
+    fr = f_write(&fil, buf, sizeof(buf), &bw);
+    if (fr != FR_OK || bw != sizeof(buf)) return fr;
+
+    fr = f_close(&fil);
+    if (fr != FR_OK) return fr;
+
+    return FR_OK;
+}
+
 int main()
 {
     stdio_init_all();
@@ -41,10 +106,10 @@ int main()
 
     // FATFS initialize
     FATFS fs;
-    FIL fil;
+    //FIL fil;
     FRESULT fr;     /* FatFs return code */
-    UINT br;
-    UINT bw;
+    //UINT br;
+    //UINT bw;
     pico_fatfs_spi_config_t fatfs_spi_config = {
         spi0,
         CLK_SLOW_DEFAULT,
@@ -63,6 +128,13 @@ int main()
         return 1;
     }
     printf("mount ok\n");
+
+    fr = prepare_wav_header("test.wav", 44100, 16);
+    if (fr != FR_OK) {
+        printf("error %d\n", fr);
+        return 1;
+    }
+    printf("done\n");
 
     // spdif_rx initialize
     spdif_rx_config_t spdif_rx_config = {

@@ -29,9 +29,8 @@ void on_lost_stable_func()
     lost_stable_flg = true;
 }
 
-FRESULT prepare_wav_header(const char *filename, uint32_t sample_rate, uint16_t bits_per_sample)
+FRESULT prepare_wav(const char *filename, uint32_t sample_rate, uint16_t bits_per_sample, FIL *fil)
 {
-    FIL fil;
     FRESULT fr;     /* FatFs return code */
     UINT br;
     UINT bw;
@@ -41,11 +40,11 @@ FRESULT prepare_wav_header(const char *filename, uint32_t sample_rate, uint16_t 
     uint16_t u16;
     uint32_t u32;
 
-    fr = f_open(&fil, filename, FA_READ | FA_WRITE | FA_CREATE_ALWAYS);
+    fr = f_open(fil, filename, FA_READ | FA_WRITE | FA_CREATE_ALWAYS);
     if (fr != FR_OK) return fr;
-    fr = f_lseek(&fil, 0);
+    fr = f_lseek(fil, 0);
     if (fr != FR_OK) return fr;
-    fr = f_truncate(&fil);
+    fr = f_truncate(fil);
     if (fr != FR_OK) return fr;
 
     // ChunkID
@@ -84,11 +83,50 @@ FRESULT prepare_wav_header(const char *filename, uint32_t sample_rate, uint16_t 
     // Subchunk2Size (temporary 0)
     memset(&buf[40], 0, 4);
 
-    fr = f_write(&fil, buf, sizeof(buf), &bw);
+    fr = f_write(fil, buf, sizeof(buf), &bw);
     if (fr != FR_OK || bw != sizeof(buf)) return fr;
 
-    fr = f_close(&fil);
+    return FR_OK;
+}
+
+FRESULT write_wav(FIL *fil, int num_samp)
+{
+    FRESULT fr;     /* FatFs return code */
+    UINT br;
+    UINT bw;
+    uint32_t u32 = 0;
+
+    for (int i = 0; i < num_samp; i++) {
+        fr = f_write(fil, (const void *) &u32, sizeof(uint32_t), &bw);
+        if (fr != FR_OK || bw != sizeof(uint32_t)) return fr;
+    }
+
+    return FR_OK;
+}
+
+FRESULT finalize_wav(FIL *fil, uint32_t sample_rate, uint16_t bits_per_sample, int num_samp)
+{
+    FRESULT fr;     /* FatFs return code */
+    UINT br;
+    UINT bw;
+    const int NUM_CHANNELS = 2;
+    uint32_t u32;
+
+    // ChunkSize (temporary 0)
+    fr = f_lseek(fil, 4);
     if (fr != FR_OK) return fr;
+    u32 = 36 + num_samp * NUM_CHANNELS * bits_per_sample / 8;
+    fr = f_write(fil, (const void *) &u32, sizeof(uint32_t), &bw);
+    if (fr != FR_OK || bw != sizeof(uint32_t)) return fr;
+
+    // Subchunk2Size (temporary 0)
+    fr = f_lseek(fil, 40);
+    if (fr != FR_OK) return fr;
+    u32 = num_samp * NUM_CHANNELS * bits_per_sample / 8;
+    fr = f_write(fil, (const void *) &u32, sizeof(uint32_t), &bw);
+    if (fr != FR_OK || bw != sizeof(uint32_t)) return fr;
+
+    f_close(fil);
 
     return FR_OK;
 }
@@ -106,7 +144,7 @@ int main()
 
     // FATFS initialize
     FATFS fs;
-    //FIL fil;
+    FIL fil;
     FRESULT fr;     /* FatFs return code */
     //UINT br;
     //UINT bw;
@@ -129,9 +167,19 @@ int main()
     }
     printf("mount ok\n");
 
-    fr = prepare_wav_header("test.wav", 44100, 16);
+    fr = prepare_wav("test.wav", 44100, 16, &fil);
     if (fr != FR_OK) {
-        printf("error %d\n", fr);
+        printf("error1 %d\n", fr);
+        return 1;
+    }
+    fr = write_wav(&fil, 1000);
+    if (fr != FR_OK) {
+        printf("error2 %d\n", fr);
+        return 1;
+    }
+    fr = finalize_wav(&fil, 44100, 16, 1000);
+    if (fr != FR_OK) {
+        printf("error3 %d\n", fr);
         return 1;
     }
     printf("done\n");

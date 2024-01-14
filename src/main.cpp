@@ -6,16 +6,34 @@
 
 #include <cstdio>
 #include <cstring>
+
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
+#include "pico/util/queue.h"
+
 #include "spdif_rx.h"
 #include "tf_card.h"
 #include "fatfs/ff.h"
+
+static constexpr int NUM_BUF = 128;
+static uint32_t _buf[NUM_BUF][SPDIF_BLOCK_SIZE];
+static int _buf_id = 0;
+
+static queue_t _queue;
+static constexpr int QUEUE_LENGTH = NUM_BUF - 1;
+
+typedef struct _sub_frame_buf_info_t {
+    int      buf_id;
+    uint32_t sub_frame_count;
+} sub_frame_buf_info_t;
 
 static constexpr uint8_t PIN_DCDC_PSM_CTRL = 23;
 static constexpr uint8_t PIN_PICO_SPDIF_RX_DATA = 15;
 volatile static bool stable_flg = false;
 volatile static bool lost_stable_flg = false;
+
+FIL *g_fil = nullptr;
+int _total_count = 0;
 
 void on_stable_func(spdif_rx_samp_freq_t samp_freq)
 {
@@ -89,17 +107,22 @@ FRESULT prepare_wav(const char *filename, uint32_t sample_rate, uint16_t bits_pe
     return FR_OK;
 }
 
-FRESULT write_wav(FIL *fil, int num_samp)
+static uint32_t wav_buf[SPDIF_BLOCK_SIZE/2];
+FRESULT write_wav(uint32_t* buff, uint32_t sub_frame_count)
 {
     FRESULT fr;     /* FatFs return code */
     UINT br;
     UINT bw;
-    uint32_t u32 = 0;
 
-    for (int i = 0; i < num_samp; i++) {
-        fr = f_write(fil, (const void *) &u32, sizeof(uint32_t), &bw);
-        if (fr != FR_OK || bw != sizeof(uint32_t)) return fr;
+    for (int i = 0; i < sub_frame_count; i++) {
+        wav_buf[i/2] <<= 16;
+        wav_buf[i/2] |= (buff[i] >> 12) & 0xffff;
     }
+
+    fr = f_write(g_fil, (const void *) wav_buf, sizeof(wav_buf), &bw);
+    if (fr != FR_OK || bw != sizeof(wav_buf)) return fr;
+
+    _total_count += sub_frame_count;
 
     return FR_OK;
 }
@@ -131,60 +154,8 @@ FRESULT finalize_wav(FIL *fil, uint32_t sample_rate, uint16_t bits_per_sample, i
     return FR_OK;
 }
 
-int main()
+void spdif_rx_init()
 {
-    stdio_init_all();
-
-    // DCDC PSM control
-    // 0: PFM mode (best efficiency)
-    // 1: PWM mode (improved ripple)
-    gpio_init(PIN_DCDC_PSM_CTRL);
-    gpio_set_dir(PIN_DCDC_PSM_CTRL, GPIO_OUT);
-    gpio_put(PIN_DCDC_PSM_CTRL, 1); // PWM mode for less Audio noise
-
-    // FATFS initialize
-    FATFS fs;
-    FIL fil;
-    FRESULT fr;     /* FatFs return code */
-    //UINT br;
-    //UINT bw;
-    pico_fatfs_spi_config_t fatfs_spi_config = {
-        spi0,
-        CLK_SLOW_DEFAULT,
-        CLK_FAST_DEFAULT,
-        PIN_SPI0_MISO_DEFAULT,
-        PIN_SPI0_CS_DEFAULT,
-        PIN_SPI0_SCK_DEFAULT,
-        PIN_SPI0_MOSI_DEFAULT,
-        true
-    };
-    pico_fatfs_set_config(&fatfs_spi_config);
-
-    fr = f_mount(&fs, "", 1);
-    if (fr != FR_OK) {
-        printf("mount error %d\n", fr);
-        return 1;
-    }
-    printf("mount ok\n");
-
-    fr = prepare_wav("test.wav", 44100, 16, &fil);
-    if (fr != FR_OK) {
-        printf("error1 %d\n", fr);
-        return 1;
-    }
-    fr = write_wav(&fil, 1000);
-    if (fr != FR_OK) {
-        printf("error2 %d\n", fr);
-        return 1;
-    }
-    fr = finalize_wav(&fil, 44100, 16, 1000);
-    if (fr != FR_OK) {
-        printf("error3 %d\n", fr);
-        return 1;
-    }
-    printf("done\n");
-
-    // spdif_rx initialize
     spdif_rx_config_t spdif_rx_config = {
         .data_pin = PIN_PICO_SPDIF_RX_DATA,
         .pio_sm = 0,
@@ -197,6 +168,75 @@ int main()
     spdif_rx_start(&spdif_rx_config);
     spdif_rx_set_callback_on_stable(on_stable_func);
     spdif_rx_set_callback_on_lost_stable(on_lost_stable_func);
+}
+
+extern "C" {
+void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err)
+{
+    if (g_fil == nullptr) return;
+
+    memcpy(_buf[_buf_id], buff, sub_frame_count * 4);
+    sub_frame_buf_info_t buf_info = {_buf_id, sub_frame_count};
+    if (!queue_try_add(&_queue, &buf_info)) {
+        printf("ERROR: _queue is full\r\n");
+    }
+    _buf_id = (_buf_id + 1) % 4;
+}
+}
+
+int main()
+{
+    stdio_init_all();
+
+    // DCDC PSM control
+    // 0: PFM mode (best efficiency)
+    // 1: PWM mode (improved ripple)
+    gpio_init(PIN_DCDC_PSM_CTRL);
+    gpio_set_dir(PIN_DCDC_PSM_CTRL, GPIO_OUT);
+    gpio_put(PIN_DCDC_PSM_CTRL, 1); // PWM mode for less Audio noise
+
+    queue_init(&_queue, sizeof(sub_frame_buf_info_t), QUEUE_LENGTH);
+
+    // FATFS initialize
+    FATFS fs;
+    FIL fil;
+    FRESULT fr;     /* FatFs return code */
+    pico_fatfs_spi_config_t fatfs_spi_config = {
+        spi0,
+        CLK_SLOW_DEFAULT,
+        CLK_FAST_DEFAULT,
+        PIN_SPI0_MISO_DEFAULT,
+        PIN_SPI0_CS_DEFAULT,
+        PIN_SPI0_SCK_DEFAULT,
+        PIN_SPI0_MOSI_DEFAULT,
+        true
+    };
+    pico_fatfs_set_config(&fatfs_spi_config);
+
+    // spdif_rx initialize
+    spdif_rx_init();
+
+    fr = f_mount(&fs, "", 1);
+    if (fr != FR_OK) {
+        printf("mount error %d\n", fr);
+        return 1;
+    }
+    printf("mount ok\n");
+
+    // Discard any input.
+    while (uart_is_readable(uart0)) {
+        uart_getc(uart0);
+    }
+    printf("\n");
+    printf("Type any character to start\n");
+    while (!uart_is_readable_within_us(uart0, 1000));
+
+    fr = prepare_wav("test.wav", 44100, 16, &fil);
+    if (fr != FR_OK) {
+        printf("error1 %d\n", fr);
+        return 1;
+    }
+    g_fil = &fil;
 
     int count = 0;
     while (true) {
@@ -208,19 +248,28 @@ int main()
             lost_stable_flg = false;
             printf("lost stable sync. waiting for signal\n");
         }
-        if (count % 100 == 0 && spdif_rx_get_state() == SPDIF_RX_STATE_STABLE) {
-            spdif_rx_samp_freq_t samp_freq = spdif_rx_get_samp_freq();
-            float samp_freq_actual = spdif_rx_get_samp_freq_actual();
-            uint32_t c_bits;
-            spdif_rx_get_c_bits(&c_bits, sizeof(c_bits), 0);
-            printf("Samp Freq = %d Hz (%7.4f KHz)\n", (int) samp_freq, samp_freq_actual / 1e3);
-            printf("c_bits = 0x%08x\n", c_bits);
-            printf("parity errors = %d\n", spdif_rx_get_parity_err_count());
+        if (queue_get_level(&_queue) > 0) {
+            sub_frame_buf_info_t buf_info;
+            queue_remove_blocking(&_queue, &buf_info);
+            fr = write_wav(_buf[buf_info.buf_id], buf_info.sub_frame_count);
+            if (fr != FR_OK) printf("error 4\n");
+            //printf("buf %d %d %d\n", buf_info.buf_id, buf_info.sub_frame_count, total_count);
+        }
+
+        if (_total_count > 44100 * 2 * 10) {
+            break;
         }
         tight_loop_contents();
-        sleep_ms(10);
         count++;
     }
+
+    fr = finalize_wav(g_fil, 44100, 16, _total_count);
+    if (fr != FR_OK) {
+        printf("error3 %d\n", fr);
+        return 1;
+    }
+    printf("done\n");
+    g_fil = nullptr;
 
     return 0;
 }

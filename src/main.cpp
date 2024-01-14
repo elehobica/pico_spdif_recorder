@@ -15,8 +15,8 @@
 #include "tf_card.h"
 #include "fatfs/ff.h"
 
-static constexpr int NUM_BUF = 128;
-static uint32_t _buf[NUM_BUF][SPDIF_BLOCK_SIZE];
+static constexpr int NUM_BUF = 16;
+static uint32_t _buf[SPDIF_BLOCK_SIZE * NUM_BUF];
 static int _buf_id = 0;
 
 static queue_t _queue;
@@ -107,20 +107,20 @@ FRESULT prepare_wav(const char *filename, uint32_t sample_rate, uint16_t bits_pe
     return FR_OK;
 }
 
-static uint32_t wav_buf[SPDIF_BLOCK_SIZE/2];
 FRESULT write_wav(uint32_t* buff, uint32_t sub_frame_count)
 {
     FRESULT fr;     /* FatFs return code */
     UINT br;
     UINT bw;
+    uint32_t wav_buf[sub_frame_count/2];
 
     for (int i = 0; i < sub_frame_count; i++) {
         wav_buf[i/2] <<= 16;
         wav_buf[i/2] |= (buff[i] >> 12) & 0xffff;
     }
 
-    fr = f_write(g_fil, (const void *) wav_buf, sizeof(wav_buf), &bw);
-    if (fr != FR_OK || bw != sizeof(wav_buf)) return fr;
+    fr = f_write(g_fil, (const void *) wav_buf, sub_frame_count*2, &bw);
+    if (fr != FR_OK || bw != sub_frame_count*2) return fr;
 
     _total_count += sub_frame_count;
 
@@ -175,12 +175,12 @@ void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_
 {
     if (g_fil == nullptr) return;
 
-    memcpy(_buf[_buf_id], buff, sub_frame_count * 4);
+    memcpy(&_buf[SPDIF_BLOCK_SIZE*_buf_id], buff, sub_frame_count * 4);
     sub_frame_buf_info_t buf_info = {_buf_id, sub_frame_count};
     if (!queue_try_add(&_queue, &buf_info)) {
         printf("ERROR: _queue is full\r\n");
     }
-    _buf_id = (_buf_id + 1) % 4;
+    _buf_id = (_buf_id + 1) % NUM_BUF;
 }
 }
 
@@ -239,6 +239,7 @@ int main()
     g_fil = &fil;
 
     int count = 0;
+    uint32_t *next_buf = &_buf[SPDIF_BLOCK_SIZE*0];
     while (true) {
         if (stable_flg) {
             stable_flg = false;
@@ -248,17 +249,26 @@ int main()
             lost_stable_flg = false;
             printf("lost stable sync. waiting for signal\n");
         }
-        if (queue_get_level(&_queue) > 0) {
-            sub_frame_buf_info_t buf_info;
-            queue_remove_blocking(&_queue, &buf_info);
-            fr = write_wav(_buf[buf_info.buf_id], buf_info.sub_frame_count);
-            if (fr != FR_OK) printf("error 4\n");
-            //printf("buf %d %d %d\n", buf_info.buf_id, buf_info.sub_frame_count, total_count);
+        uint queue_level = queue_get_level(&_queue);
+        if (queue_level >= NUM_BUF/2) {
+            int buf_accum = 1;
+            while (queue_level > 0) {
+                sub_frame_buf_info_t buf_info;
+                queue_remove_blocking(&_queue, &buf_info);
+                if (queue_level == 1 || buf_info.buf_id >= NUM_BUF - 1) {
+                    fr = write_wav(next_buf, buf_info.sub_frame_count * buf_accum);
+                    if (_total_count > 44100 * 2 * 100) break;
+                    if (fr != FR_OK) printf("error 4\n");
+                    next_buf = &_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_BUF)];
+                    break;
+                } else {
+                    buf_accum++;
+                }
+                queue_level = queue_get_level(&_queue);
+            }
         }
 
-        if (_total_count > 44100 * 2 * 10) {
-            break;
-        }
+        if (_total_count > 44100 * 2 * 100) break;
         tight_loop_contents();
         count++;
     }

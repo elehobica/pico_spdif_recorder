@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "pico/stdlib.h"
+#include "pico/multicore.h"
 #include "hardware/clocks.h"
 #include "pico/util/queue.h"
 
@@ -15,25 +16,41 @@
 #include "tf_card.h"
 #include "fatfs/ff.h"
 
-static constexpr int NUM_BUF = 16;
-static uint32_t _buf[SPDIF_BLOCK_SIZE * NUM_BUF];
-static int _buf_id = 0;
+static constexpr uint PIN_LED = PICO_DEFAULT_LED_PIN;
 
-static queue_t _queue;
-static constexpr int QUEUE_LENGTH = NUM_BUF - 1;
+static constexpr int NUM_SUB_FRAME_BUF = 16;
+static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
+static int _sub_frame_buf_id = 0;
 
 typedef struct _sub_frame_buf_info_t {
     int      buf_id;
     uint32_t sub_frame_count;
 } sub_frame_buf_info_t;
+static queue_t _spdif_queue;
+static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
+
+typedef enum _wav_dump_cmd_t {
+    START = 0,
+    STOP
+} wav_dump_cmd_t;
+typedef struct _wav_dump_cmd_data_t {
+    wav_dump_cmd_t cmd;
+    uint32_t       param;
+} wav_dump_cmd_data_t;
+static queue_t _wav_dump_cmd_queue;
+static constexpr int WAV_DUMP_CMD_QUEUE_LENGTH = 1;
 
 static constexpr uint8_t PIN_DCDC_PSM_CTRL = 23;
 static constexpr uint8_t PIN_PICO_SPDIF_RX_DATA = 15;
 volatile static bool stable_flg = false;
 volatile static bool lost_stable_flg = false;
 
-FIL *g_fil = nullptr;
-int _total_count = 0;
+FIL *_g_fil = nullptr;
+
+static inline uint32_t _millis()
+{
+    return to_ms_since_boot(get_absolute_time());
+}
 
 void on_stable_func(spdif_rx_samp_freq_t samp_freq)
 {
@@ -115,14 +132,12 @@ FRESULT write_wav(uint32_t* buff, uint32_t sub_frame_count)
     uint32_t wav_buf[sub_frame_count/2];
 
     for (int i = 0; i < sub_frame_count; i++) {
-        wav_buf[i/2] <<= 16;
-        wav_buf[i/2] |= (buff[i] >> 12) & 0xffff;
+        wav_buf[i/2] >>= 16;
+        wav_buf[i/2] |= ((buff[i] >> 12) & 0xffff) << 16;
     }
 
-    fr = f_write(g_fil, (const void *) wav_buf, sub_frame_count*2, &bw);
+    fr = f_write(_g_fil, (const void *) wav_buf, sub_frame_count*2, &bw);
     if (fr != FR_OK || bw != sub_frame_count*2) return fr;
-
-    _total_count += sub_frame_count;
 
     return FR_OK;
 }
@@ -173,20 +188,90 @@ void spdif_rx_init()
 extern "C" {
 void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err)
 {
-    if (g_fil == nullptr) return;
+    if (_g_fil == nullptr) return;
 
-    memcpy(&_buf[SPDIF_BLOCK_SIZE*_buf_id], buff, sub_frame_count * 4);
-    sub_frame_buf_info_t buf_info = {_buf_id, sub_frame_count};
-    if (!queue_try_add(&_queue, &buf_info)) {
-        printf("ERROR: _queue is full\r\n");
+    memcpy(&_sub_frame_buf[SPDIF_BLOCK_SIZE*_sub_frame_buf_id], buff, sub_frame_count * 4);
+    sub_frame_buf_info_t buf_info = {_sub_frame_buf_id, sub_frame_count};
+    if (!queue_try_add(&_spdif_queue, &buf_info)) {
+        printf("ERROR: _spdif_queue is full\r\n");
     }
-    _buf_id = (_buf_id + 1) % NUM_BUF;
+    _sub_frame_buf_id = (_sub_frame_buf_id + 1) % NUM_SUB_FRAME_BUF;
 }
+}
+
+void dump_wav()
+{
+    FIL fil;
+    FRESULT fr;     /* FatFs return code */
+    int suffix = 0;
+    wav_dump_cmd_data_t cmd_data;
+    char filename[16];
+
+    printf("start dump_wav() loop\n");
+
+    while (true) {
+        if (queue_get_level(&_wav_dump_cmd_queue) > 0) {
+            queue_remove_blocking(&_wav_dump_cmd_queue, &cmd_data);
+            if (cmd_data.cmd != START) continue;
+
+            int total_count = 0;
+            sprintf(filename, "test%d.wav", suffix);
+            fr = prepare_wav(filename, 44100, 16, &fil);
+            if (fr != FR_OK) {
+                printf("error1 %d\n", fr);
+                return;
+            }
+            printf("start dumping %s\n", filename);
+            _g_fil = &fil;
+
+            uint32_t *next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
+            while (true) {
+                uint queue_level = queue_get_level(&_spdif_queue);
+                if (queue_level >= NUM_SUB_FRAME_BUF/2) {
+                    int buf_accum = 1;
+                    while (queue_level > 0) {
+                        sub_frame_buf_info_t buf_info;
+                        queue_remove_blocking(&_spdif_queue, &buf_info);
+                        if (queue_level == 1 || buf_info.buf_id >= NUM_SUB_FRAME_BUF - 1) {
+                            fr = write_wav(next_buf, buf_info.sub_frame_count * buf_accum);
+                            total_count += buf_info.sub_frame_count * buf_accum;
+                            if (fr != FR_OK) printf("error 4\n");
+                            next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF)];
+                            break;
+                        } else {
+                            buf_accum++;
+                        }
+                        queue_level = queue_get_level(&_spdif_queue);
+                    }
+                }
+
+                if (queue_get_level(&_wav_dump_cmd_queue) > 0) {
+                    queue_remove_blocking(&_wav_dump_cmd_queue, &cmd_data);
+                    if (cmd_data.cmd == STOP) break;
+                }
+            }
+
+            fr = finalize_wav(_g_fil, 44100, 16, total_count);
+            if (fr != FR_OK) {
+                printf("error3 %d\n", fr);
+                return;
+            }
+            _g_fil = nullptr;
+            printf("dump done %s\n", filename);
+            suffix++;
+        }
+        sleep_ms(10);
+    }
 }
 
 int main()
 {
     stdio_init_all();
+
+    // LED
+    gpio_init(PIN_LED);
+    gpio_set_dir(PIN_LED, GPIO_OUT);
+    gpio_put(PIN_LED, false);
 
     // DCDC PSM control
     // 0: PFM mode (best efficiency)
@@ -195,11 +280,12 @@ int main()
     gpio_set_dir(PIN_DCDC_PSM_CTRL, GPIO_OUT);
     gpio_put(PIN_DCDC_PSM_CTRL, 1); // PWM mode for less Audio noise
 
-    queue_init(&_queue, sizeof(sub_frame_buf_info_t), QUEUE_LENGTH);
+    // Queues
+    queue_init(&_spdif_queue, sizeof(sub_frame_buf_info_t), SPDIF_QUEUE_LENGTH);
+    queue_init(&_wav_dump_cmd_queue, sizeof(wav_dump_cmd_data_t), WAV_DUMP_CMD_QUEUE_LENGTH);
 
     // FATFS initialize
     FATFS fs;
-    FIL fil;
     FRESULT fr;     /* FatFs return code */
     pico_fatfs_spi_config_t fatfs_spi_config = {
         spi0,
@@ -216,6 +302,7 @@ int main()
     // spdif_rx initialize
     spdif_rx_init();
 
+    // mount fatfs
     fr = f_mount(&fs, "", 1);
     if (fr != FR_OK) {
         printf("mount error %d\n", fr);
@@ -231,15 +318,12 @@ int main()
     printf("Type any character to start\n");
     while (!uart_is_readable_within_us(uart0, 1000));
 
-    fr = prepare_wav("test.wav", 44100, 16, &fil);
-    if (fr != FR_OK) {
-        printf("error1 %d\n", fr);
-        return 1;
-    }
-    g_fil = &fil;
+    // dump_wav runs on Core1
+    multicore_reset_core1();
+    multicore_launch_core1(dump_wav);
 
     int count = 0;
-    uint32_t *next_buf = &_buf[SPDIF_BLOCK_SIZE*0];
+    bool is_dumping = false;
     while (true) {
         if (stable_flg) {
             stable_flg = false;
@@ -248,38 +332,42 @@ int main()
         if (lost_stable_flg) {
             lost_stable_flg = false;
             printf("lost stable sync. waiting for signal\n");
-        }
-        uint queue_level = queue_get_level(&_queue);
-        if (queue_level >= NUM_BUF/2) {
-            int buf_accum = 1;
-            while (queue_level > 0) {
-                sub_frame_buf_info_t buf_info;
-                queue_remove_blocking(&_queue, &buf_info);
-                if (queue_level == 1 || buf_info.buf_id >= NUM_BUF - 1) {
-                    fr = write_wav(next_buf, buf_info.sub_frame_count * buf_accum);
-                    if (_total_count > 44100 * 2 * 100) break;
-                    if (fr != FR_OK) printf("error 4\n");
-                    next_buf = &_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_BUF)];
-                    break;
-                } else {
-                    buf_accum++;
-                }
-                queue_level = queue_get_level(&_queue);
+            if (is_dumping) {
+                wav_dump_cmd_data_t cmd_data;
+                cmd_data.cmd = STOP;
+                cmd_data.param = 0L;
+                printf("Type any character to start\n");
+                queue_try_add(&_wav_dump_cmd_queue, &cmd_data);
+                is_dumping = !is_dumping;
             }
         }
+        if (uart_is_readable_within_us(uart0, 0)) {
+            wav_dump_cmd_data_t cmd_data;
+            if (is_dumping) {
+                cmd_data.cmd = STOP;
+                printf("Type any character to start\n");
+            } else {
+                cmd_data.cmd = START;
+                printf("Type any character to stop\n");
+            }
+            cmd_data.param = 0L;
+            queue_try_add(&_wav_dump_cmd_queue, &cmd_data);
+            is_dumping = !is_dumping;
+            // Discard any input.
+            while (uart_is_readable(uart0)) {
+                uart_getc(uart0);
+            }
+        }
+        if (is_dumping) {
+            gpio_put(PIN_LED, (_millis() / 500) % 2 == 0);
+        } else {
+            gpio_put(PIN_LED, false);
+        }
 
-        if (_total_count > 44100 * 2 * 100) break;
         tight_loop_contents();
+        sleep_ms(10);
         count++;
     }
-
-    fr = finalize_wav(g_fil, 44100, 16, _total_count);
-    if (fr != FR_OK) {
-        printf("error3 %d\n", fr);
-        return 1;
-    }
-    printf("done\n");
-    g_fil = nullptr;
 
     return 0;
 }

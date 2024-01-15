@@ -18,7 +18,7 @@
 
 static constexpr uint PIN_LED = PICO_DEFAULT_LED_PIN;
 
-static constexpr int NUM_SUB_FRAME_BUF = 16;
+static constexpr int NUM_SUB_FRAME_BUF = 64;
 static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
 static int _sub_frame_buf_id = 0;
 
@@ -142,7 +142,7 @@ FRESULT write_wav(uint32_t* buff, uint32_t sub_frame_count)
     return FR_OK;
 }
 
-FRESULT finalize_wav(FIL *fil, uint32_t sample_rate, uint16_t bits_per_sample, int num_samp)
+FRESULT finalize_wav(FIL *fil, uint16_t bits_per_sample, int num_samp)
 {
     FRESULT fr;     /* FatFs return code */
     UINT br;
@@ -206,22 +206,25 @@ void dump_wav()
     int suffix = 0;
     wav_dump_cmd_data_t cmd_data;
     char filename[16];
+    uint32_t samp_freq;
+    const uint16_t bits_per_sample = 16;
 
-    printf("start dump_wav() loop\n");
+    printf("dump_wav() loop\n");
 
     while (true) {
         if (queue_get_level(&_wav_dump_cmd_queue) > 0) {
             queue_remove_blocking(&_wav_dump_cmd_queue, &cmd_data);
             if (cmd_data.cmd != START) continue;
 
+            samp_freq = cmd_data.param;
             int total_count = 0;
             sprintf(filename, "test%d.wav", suffix);
-            fr = prepare_wav(filename, 44100, 16, &fil);
+            fr = prepare_wav(filename, samp_freq, bits_per_sample, &fil);
             if (fr != FR_OK) {
                 printf("error1 %d\n", fr);
                 return;
             }
-            printf("start dumping %s\n", filename);
+            printf("start dumping %s @ %d\n", filename, samp_freq);
             _g_fil = &fil;
 
             uint32_t *next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
@@ -251,7 +254,7 @@ void dump_wav()
                 }
             }
 
-            fr = finalize_wav(_g_fil, 44100, 16, total_count);
+            fr = finalize_wav(_g_fil, bits_per_sample, total_count);
             if (fr != FR_OK) {
                 printf("error3 %d\n", fr);
                 return;
@@ -345,12 +348,13 @@ int main()
             wav_dump_cmd_data_t cmd_data;
             if (is_dumping) {
                 cmd_data.cmd = STOP;
+                cmd_data.param = 0L;
                 printf("Type any character to start\n");
             } else {
                 cmd_data.cmd = START;
+                cmd_data.param = (uint32_t) spdif_rx_get_samp_freq();
                 printf("Type any character to stop\n");
             }
-            cmd_data.param = 0L;
             queue_try_add(&_wav_dump_cmd_queue, &cmd_data);
             is_dumping = !is_dumping;
             // Discard any input.

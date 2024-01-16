@@ -124,20 +124,32 @@ FRESULT prepare_wav(const char *filename, uint32_t sample_rate, uint16_t bits_pe
     return FR_OK;
 }
 
-FRESULT write_wav(uint32_t* buff, uint32_t sub_frame_count)
+FRESULT write_wav(uint32_t* buff, uint16_t bits_per_sample, uint32_t sub_frame_count)
 {
     FRESULT fr;     /* FatFs return code */
     UINT br;
     UINT bw;
-    uint32_t wav_buf[sub_frame_count/2];
 
-    for (int i = 0; i < sub_frame_count; i++) {
-        wav_buf[i/2] >>= 16;
-        wav_buf[i/2] |= ((buff[i] >> 12) & 0xffff) << 16;
+    if (bits_per_sample == 16) {
+        uint32_t wav_buf[sub_frame_count/2];
+        for (int i = 0; i < sub_frame_count; i++) {
+            wav_buf[i/2] >>= 16;
+            wav_buf[i/2] |= ((buff[i] >> 12) & 0xffff) << 16;
+        }
+        fr = f_write(_g_fil, (const void *) wav_buf, sub_frame_count*2, &bw);
+        if (fr != FR_OK || bw != sub_frame_count*2) return fr;
+    } else { // 24
+        uint32_t wav_buf[sub_frame_count*3/4];
+        int j = 0;
+        for (int i = 0; i < sub_frame_count; i+=4) {
+            wav_buf[j+0] = (((buff[i+1] >> 4) & 0x0000ff) << 24) | (((buff[i+0] >> 4) & 0xffffff) >>  0);
+            wav_buf[j+1] = (((buff[i+2] >> 4) & 0x00ffff) << 16) | (((buff[i+1] >> 4) & 0xffff00) >>  8);
+            wav_buf[j+2] = (((buff[i+3] >> 4) & 0xffffff) <<  8) | (((buff[i+2] >> 4) & 0xff0000) >> 16);
+            j += 3;
+        }
+        fr = f_write(_g_fil, (const void *) wav_buf, sub_frame_count*3, &bw);
+        if (fr != FR_OK || bw != sub_frame_count*3) return fr;
     }
-
-    fr = f_write(_g_fil, (const void *) wav_buf, sub_frame_count*2, &bw);
-    if (fr != FR_OK || bw != sub_frame_count*2) return fr;
 
     return FR_OK;
 }
@@ -207,7 +219,7 @@ void dump_wav()
     wav_dump_cmd_data_t cmd_data;
     char filename[16];
     uint32_t samp_freq;
-    const uint16_t bits_per_sample = 16;
+    const uint16_t bits_per_sample = 24;
 
     printf("dump_wav() loop\n");
 
@@ -236,7 +248,7 @@ void dump_wav()
                         sub_frame_buf_info_t buf_info;
                         queue_remove_blocking(&_spdif_queue, &buf_info);
                         if (queue_level == 1 || buf_info.buf_id >= NUM_SUB_FRAME_BUF - 1) {
-                            fr = write_wav(next_buf, buf_info.sub_frame_count * buf_accum);
+                            fr = write_wav(next_buf, bits_per_sample, buf_info.sub_frame_count * buf_accum);
                             total_count += buf_info.sub_frame_count * buf_accum;
                             if (fr != FR_OK) printf("error 4\n");
                             next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF)];

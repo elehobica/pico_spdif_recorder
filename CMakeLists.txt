@@ -5,7 +5,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 include($ENV{PICO_EXTRAS_PATH}/external/pico_extras_import.cmake)
 
-set(project_name "pico_spdif_dump" C CXX ASM)
+set(project_name "pico_spdif_recorder" C CXX ASM)
 project(${project_name})
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)

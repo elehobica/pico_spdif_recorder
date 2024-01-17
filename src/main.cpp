@@ -21,6 +21,7 @@ static constexpr uint PIN_LED = PICO_DEFAULT_LED_PIN;
 static constexpr int NUM_SUB_FRAME_BUF = 64;
 static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
 static int _sub_frame_buf_id = 0;
+static uint32_t _wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
 
 typedef struct _sub_frame_buf_info_t {
     int      buf_id;
@@ -137,21 +138,19 @@ FRESULT write_wav(uint32_t* buff, uint16_t bits_per_sample, uint32_t sub_frame_c
     UINT bw;
 
     if (bits_per_sample == DATA_16BITS) {
-        uint32_t wav_buf[sub_frame_count/2];
         for (int i = 0; i < sub_frame_count; i++) {
-            wav_buf[i/2] >>= 16;
-            wav_buf[i/2] |= ((buff[i] >> 12) & 0xffff) << 16;
+            _wav_buf[i/2] >>= 16;
+            _wav_buf[i/2] |= ((buff[i] >> 12) & 0xffff) << 16;
         }
-        fr = f_write(_g_fil, (const void *) wav_buf, sub_frame_count*2, &bw);
+        fr = f_write(_g_fil, (const void *) _wav_buf, sub_frame_count*2, &bw);
         if (fr != FR_OK || bw != sub_frame_count*2) return fr;
     } else if (bits_per_sample == DATA_24BITS) {
-        uint32_t wav_buf[sub_frame_count*3/4];
         for (int i = 0, j = 0; i < sub_frame_count; i += 4, j += 3) {
-            wav_buf[j+0] = (((buff[i+1] >> 4) & 0x0000ff) << 24) | (((buff[i+0] >> 4) & 0xffffff) >>  0);
-            wav_buf[j+1] = (((buff[i+2] >> 4) & 0x00ffff) << 16) | (((buff[i+1] >> 4) & 0xffff00) >>  8);
-            wav_buf[j+2] = (((buff[i+3] >> 4) & 0xffffff) <<  8) | (((buff[i+2] >> 4) & 0xff0000) >> 16);
+            _wav_buf[j+0] = (((buff[i+1] >> 4) & 0x0000ff) << 24) | (((buff[i+0] >> 4) & 0xffffff) >>  0);
+            _wav_buf[j+1] = (((buff[i+2] >> 4) & 0x00ffff) << 16) | (((buff[i+1] >> 4) & 0xffff00) >>  8);
+            _wav_buf[j+2] = (((buff[i+3] >> 4) & 0xffffff) <<  8) | (((buff[i+2] >> 4) & 0xff0000) >> 16);
         }
-        fr = f_write(_g_fil, (const void *) wav_buf, sub_frame_count*3, &bw);
+        fr = f_write(_g_fil, (const void *) _wav_buf, sub_frame_count*3, &bw);
         if (fr != FR_OK || bw != sub_frame_count*3) return fr;
     }
 

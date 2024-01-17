@@ -31,8 +31,7 @@ static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
 
 typedef enum _wav_dump_cmd_t {
     START = 0,
-    FINISH,
-    RESOLUTION
+    FINISH
 } wav_dump_cmd_t;
 typedef struct _wav_dump_cmd_data_t {
     wav_dump_cmd_t cmd;
@@ -207,6 +206,11 @@ void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_
 {
     if (_g_fil == nullptr) return;
 
+    if (sub_frame_count != SPDIF_BLOCK_SIZE) {
+        printf("ERROR: illegal sub_frame_count\r\n");
+        return;
+    }
+
     memcpy(&_sub_frame_buf[SPDIF_BLOCK_SIZE*_sub_frame_buf_id], buff, sub_frame_count * 4);
     sub_frame_buf_info_t buf_info = {_sub_frame_buf_id, sub_frame_count};
     if (!queue_try_add(&_spdif_queue, &buf_info)) {
@@ -226,7 +230,7 @@ void dump_wav()
     uint32_t samp_freq;
     uint16_t bits_per_sample = DATA_16BITS;
 
-    printf("dump_wav() loop\n");
+    printf("dump_wav() task started\r\n");
 
     while (true) {
         if (queue_get_level(&_wav_dump_cmd_queue) > 0) {
@@ -239,10 +243,10 @@ void dump_wav()
             sprintf(filename, "test%d.wav", suffix);
             fr = prepare_wav(filename, samp_freq, bits_per_sample, &fil);
             if (fr != FR_OK) {
-                printf("error1 %d\n", fr);
+                printf("error1 %d\r\n", fr);
                 return;
             }
-            printf("start dumping %s @ %d bits %d Hz\n", filename, bits_per_sample, samp_freq);
+            printf("start recording %s @ %d bits %d Hz\r\n", filename, bits_per_sample, samp_freq);
             _g_fil = &fil;
 
             uint32_t *next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
@@ -256,7 +260,7 @@ void dump_wav()
                         if (queue_level == 1 || buf_info.buf_id >= NUM_SUB_FRAME_BUF - 1) {
                             fr = write_wav(next_buf, bits_per_sample, buf_info.sub_frame_count * buf_accum);
                             total_count += buf_info.sub_frame_count * buf_accum;
-                            if (fr != FR_OK) printf("error 4\n");
+                            if (fr != FR_OK) printf("error 4\r\n");
                             next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF)];
                             break;
                         } else {
@@ -274,15 +278,33 @@ void dump_wav()
 
             fr = finalize_wav(_g_fil, bits_per_sample, total_count);
             if (fr != FR_OK) {
-                printf("error3 %d\n", fr);
+                printf("error3 %d\r\n", fr);
                 return;
             }
             _g_fil = nullptr;
-            printf("dump done %s\n", filename);
+            printf("dump done %s\r\n", filename);
             suffix++;
         }
         sleep_ms(10);
     }
+}
+
+void start_recording(uint16_t bits_per_sample)
+{
+    wav_dump_cmd_data_t cmd_data;
+    cmd_data.cmd = START;
+    cmd_data.param1 = (uint32_t) spdif_rx_get_samp_freq();
+    cmd_data.param2 = (uint32_t) bits_per_sample;
+    queue_try_add(&_wav_dump_cmd_queue, &cmd_data);
+}
+
+void finish_recording()
+{
+    wav_dump_cmd_data_t cmd_data;
+    cmd_data.cmd = FINISH;
+    cmd_data.param1 = 0L;
+    cmd_data.param2 = 0L;
+    queue_try_add(&_wav_dump_cmd_queue, &cmd_data);
 }
 
 int main()
@@ -326,76 +348,72 @@ int main()
     // mount fatfs
     fr = f_mount(&fs, "", 1);
     if (fr != FR_OK) {
-        printf("mount error %d\n", fr);
+        printf("mount error %d\r\n", fr);
         return 1;
     }
-    printf("mount ok\n");
+    printf("mount ok\r\n");
 
     // dump_wav runs on Core1
     multicore_reset_core1();
     multicore_launch_core1(dump_wav);
 
     int count = 0;
-    bool is_dumping = false;
+    bool start_standby = false;
+    bool is_recording = false;
     uint16_t bits_per_sample = DATA_16BITS;
 
     // Discard any input.
     while (uart_is_readable(uart0)) {
         uart_getc(uart0);
     }
-    printf("\n");
-    printf("Type any character to start\n");
-    printf("bit resolution: %d bits\n", bits_per_sample);
+    printf("\r\n");
+    printf("bit resolution: %d bits\r\n", bits_per_sample);
     while (!uart_is_readable(uart0));
 
     while (true) {
         if (stable_flg) {
             stable_flg = false;
-            printf("detected stable sync\n");
+            printf("detected stable sync @ %d Hz\r\n", spdif_rx_get_samp_freq());
+            if (start_standby) {
+                start_recording(bits_per_sample);
+                start_standby = false;
+                is_recording = true;
+            }
         }
         if (lost_stable_flg) {
             lost_stable_flg = false;
-            printf("lost stable sync. waiting for signal\n");
-            if (is_dumping) {
-                wav_dump_cmd_data_t cmd_data;
-                cmd_data.cmd = FINISH;
-                cmd_data.param1 = 0L;
-                cmd_data.param2 = 0L;
-                queue_try_add(&_wav_dump_cmd_queue, &cmd_data);
-                printf("Type any character to start\n");
-                is_dumping = !is_dumping;
+            printf("lost stable sync. waiting for signal\r\n");
+            if (is_recording) {
+                finish_recording();
+                is_recording = false;
             }
         }
         if (uart_is_readable(uart0)) {
             char c = uart_getc(uart0);
             if (c == 's') {
-                if (!is_dumping) {
-                    wav_dump_cmd_data_t cmd_data;
-                    cmd_data.cmd = START;
-                    cmd_data.param1 = (uint32_t) spdif_rx_get_samp_freq();
-                    cmd_data.param2 = (uint32_t) bits_per_sample;
-                    queue_try_add(&_wav_dump_cmd_queue, &cmd_data);
-                    printf("Type any character to stop\n");
-                    is_dumping = true;
+                if (!is_recording) {
+                    if (spdif_rx_get_state() == SPDIF_RX_STATE_STABLE) {
+                        start_recording(bits_per_sample);
+                        start_standby = false;
+                        is_recording = true;
+                    } else {
+                        printf("standby start when detecting stable sync\r\n");
+                        start_standby = true;
+                    }
                 }
             } else if (c == 'f') {
-                if (is_dumping) {
-                    wav_dump_cmd_data_t cmd_data;
-                    cmd_data.cmd = FINISH;
-                    cmd_data.param1 = 0L;
-                    cmd_data.param2 = 0L;
-                    queue_try_add(&_wav_dump_cmd_queue, &cmd_data);
-                    printf("Type any character to start\n");
-                    is_dumping = false;
+                if (is_recording) {
+                    finish_recording();
+                    is_recording = false;
                 }
             } else if (c == 'r') {
-                if (!is_dumping) {
+                if (!is_recording) {
                     if (bits_per_sample == DATA_16BITS) {
                         bits_per_sample = DATA_24BITS;
                     } else {
                         bits_per_sample = DATA_16BITS;
                     }
-                    printf("bit resolution: %d bits\n", bits_per_sample);
+                    printf("bit resolution: %d bits\r\n", bits_per_sample);
                 }
             }
             // Discard any input of the rest.
@@ -403,7 +421,7 @@ int main()
                 uart_getc(uart0);
             }
         }
-        if (is_dumping) {
+        if (is_recording) {
             gpio_put(PIN_LED, (_millis() / 500) % 2 == 0);
         } else {
             gpio_put(PIN_LED, false);

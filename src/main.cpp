@@ -18,7 +18,8 @@
 
 static constexpr uint PIN_LED = PICO_DEFAULT_LED_PIN;
 
-static constexpr int NUM_SUB_FRAME_BUF = 64;
+// maximize buffers to the limit
+static constexpr int NUM_SUB_FRAME_BUF = 96;
 static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
 static int _sub_frame_buf_id = 0;
 static uint32_t _wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
@@ -396,13 +397,17 @@ int main()
                         start_standby = false;
                         is_recording = true;
                     } else {
-                        printf("standby start when detecting stable sync\r\n");
+                        printf("standby start when stable sync detected\r\n");
                         start_standby = true;
                     }
                 }
             } else if (c == 'f') {
                 if (is_recording) {
                     finish_recording();
+                    is_recording = false;
+                } else if (start_standby) {
+                    printf("standby cancelled\r\n");
+                    start_standby = false;
                     is_recording = false;
                 }
             } else if (c == 'r') {

@@ -19,6 +19,7 @@ add_subdirectory(lib/pico_fatfs)
 # select sample application here (choose only one)
 add_executable(${PROJECT_NAME}
     src/main.cpp
+    src/record_wav.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}

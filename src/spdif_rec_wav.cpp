@@ -6,7 +6,7 @@
 
 #include <cstdio>
 #include <cstring>
-#include "record_wav.h"
+#include "spdif_rec_wav.h"
 #include "fatfs/ff.h"
 
 /*---------------------------------------/
@@ -14,25 +14,25 @@
 /---------------------------------------*/
 void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err)
 {
-    record_wav::push_sub_frame_buf(buff, sub_frame_count);
+    spdif_rec_wav::push_sub_frame_buf(buff, sub_frame_count);
 }
 
 /*-----------------/
 /  Class variables
 /-----------------*/
-uint32_t record_wav::_sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
-int      record_wav::_sub_frame_buf_id = 0;
-uint32_t record_wav::_wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
-bool     record_wav::_recording_flag;
-queue_t  record_wav::_spdif_queue;
-queue_t  record_wav::_record_wav_cmd_queue;
+uint32_t spdif_rec_wav::_sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
+int      spdif_rec_wav::_sub_frame_buf_id = 0;
+uint32_t spdif_rec_wav::_wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
+bool     spdif_rec_wav::_recording_flag;
+queue_t  spdif_rec_wav::_spdif_queue;
+queue_t  spdif_rec_wav::_record_wav_cmd_queue;
 
 /*-----------------/
 /  Class functions
 /-----------------*/
-void record_wav::process_loop()
+void spdif_rec_wav::process_loop()
 {
-    record_wav *inst = nullptr;
+    spdif_rec_wav *inst = nullptr;
     FATFS fs;
     FRESULT fr;     /* FatFs return code */
     int suffix = 0;
@@ -53,7 +53,7 @@ void record_wav::process_loop()
     queue_init(&_spdif_queue, sizeof(sub_frame_buf_info_t), SPDIF_QUEUE_LENGTH);
     queue_init(&_record_wav_cmd_queue, sizeof(record_wav_cmd_data_t), RECORD_WAV_CMD_QUEUE_LENGTH);
 
-    printf("record_wav process started\r\n");
+    printf("spdif_rec_wav process started\r\n");
 
     // Initialize class variables
     _recording_flag = false;
@@ -68,7 +68,7 @@ void record_wav::process_loop()
             bits_per_sample = cmd_data.param2;
             int total_count = 0;
             sprintf(filename, "test%d.wav", suffix);
-            inst = new record_wav(filename, samp_freq, bits_per_sample);
+            inst = new spdif_rec_wav(filename, samp_freq, bits_per_sample);
             if (inst == nullptr) {
                 printf("error1 %d\r\n", fr);
                 return;
@@ -117,7 +117,7 @@ void record_wav::process_loop()
     }
 }
 
-void record_wav::push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count)
+void spdif_rec_wav::push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     if (!_recording_flag) return;
 
@@ -134,7 +134,7 @@ void record_wav::push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_fra
     _sub_frame_buf_id = (_sub_frame_buf_id + 1) % NUM_SUB_FRAME_BUF;
 }
 
-void record_wav::start_recording(uint16_t bits_per_sample)
+void spdif_rec_wav::start_recording(uint16_t bits_per_sample)
 {
     record_wav_cmd_data_t cmd_data;
     cmd_data.cmd = START_CMD;
@@ -143,7 +143,7 @@ void record_wav::start_recording(uint16_t bits_per_sample)
     queue_try_add(&_record_wav_cmd_queue, &cmd_data);
 }
 
-void record_wav::end_recording()
+void spdif_rec_wav::end_recording()
 {
     record_wav_cmd_data_t cmd_data;
     cmd_data.cmd = END_CMD;
@@ -152,7 +152,7 @@ void record_wav::end_recording()
     queue_try_add(&_record_wav_cmd_queue, &cmd_data);
 }
 
-bool record_wav::is_recording()
+bool spdif_rec_wav::is_recording()
 {
     return _recording_flag;
 }
@@ -160,7 +160,7 @@ bool record_wav::is_recording()
 /*-----------------/
 /  Constructor
 /-----------------*/
-record_wav::record_wav(const char *filename, const uint32_t sample_freq, const uint16_t bits_per_sample)
+spdif_rec_wav::spdif_rec_wav(const char *filename, const uint32_t sample_freq, const uint16_t bits_per_sample)
  : _sample_freq(sample_freq), _bits_per_sample(bits_per_sample)
 {
     FRESULT fr;     /* FatFs return code */
@@ -226,14 +226,14 @@ record_wav::record_wav(const char *filename, const uint32_t sample_freq, const u
 /*-----------------/
 /  Destructor
 /-----------------*/
-record_wav::~record_wav()
+spdif_rec_wav::~spdif_rec_wav()
 {
 }
 
 /*--------------------/
 /  Member functions
 /--------------------*/
-FRESULT record_wav::write(const uint32_t* buff, const uint32_t sub_frame_count)
+FRESULT spdif_rec_wav::write(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     FRESULT fr;     /* FatFs return code */
     UINT br;
@@ -259,7 +259,7 @@ FRESULT record_wav::write(const uint32_t* buff, const uint32_t sub_frame_count)
     return FR_OK;
 }
 
-FRESULT record_wav::finalize(const int num_samp)
+FRESULT spdif_rec_wav::finalize(const int num_samp)
 {
     FRESULT fr;     /* FatFs return code */
     UINT br;

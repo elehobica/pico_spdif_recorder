@@ -34,7 +34,7 @@ extern "C" {
 void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err);
 }
 
-class record_wav
+class spdif_rec_wav
 {
 public:
     static void process_loop();
@@ -42,8 +42,8 @@ public:
     static void end_recording();
     static bool is_recording();
 
-    record_wav(const char *filename, const uint32_t sample_rate, const uint16_t bits_per_sample);
-    virtual ~record_wav();
+    spdif_rec_wav(const char *filename, const uint32_t sample_rate, const uint16_t bits_per_sample);
+    virtual ~spdif_rec_wav();
 
 private:
     static constexpr int NUM_CHANNELS = 2;

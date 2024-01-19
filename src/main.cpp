@@ -11,7 +11,7 @@
 #include "pico/multicore.h"
 
 #include "spdif_rx.h"
-#include "record_wav.h"
+#include "spdif_rec_wav.h"
 #include "tf_card.h"
 
 static constexpr uint PIN_LED = PICO_DEFAULT_LED_PIN;
@@ -72,7 +72,7 @@ void fatfs_config()
 
 void record_wav_process_loop()
 {
-    record_wav::process_loop();
+    spdif_rec_wav::process_loop();
 }
 
 int main()
@@ -97,7 +97,7 @@ int main()
     // FATFS config
     fatfs_config();
 
-    // record_wav process runs on Core1
+    // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
     multicore_launch_core1(record_wav_process_loop);
 
@@ -118,23 +118,23 @@ int main()
             stable_flg = false;
             printf("detected stable sync @ %d Hz\r\n", spdif_rx_get_samp_freq());
             if (start_standby) {
-                record_wav::start_recording(bits_per_sample);
+                spdif_rec_wav::start_recording(bits_per_sample);
                 start_standby = false;
             }
         }
         if (lost_stable_flg) {
             lost_stable_flg = false;
             printf("lost stable sync. waiting for signal\r\n");
-            if (record_wav::is_recording()) {
-                record_wav::end_recording();
+            if (spdif_rec_wav::is_recording()) {
+                spdif_rec_wav::end_recording();
             }
         }
         if (uart_is_readable(uart0)) {
             char c = uart_getc(uart0);
             if (c == 's') {
-                if (!record_wav::is_recording()) {
+                if (!spdif_rec_wav::is_recording()) {
                     if (spdif_rx_get_state() == SPDIF_RX_STATE_STABLE) {
-                        record_wav::start_recording(bits_per_sample);
+                        spdif_rec_wav::start_recording(bits_per_sample);
                         start_standby = false;
                     } else {
                         printf("standby start when stable sync detected\r\n");
@@ -142,14 +142,14 @@ int main()
                     }
                 }
             } else if (c == 'e') {
-                if (record_wav::is_recording()) {
-                    record_wav::end_recording();
+                if (spdif_rec_wav::is_recording()) {
+                    spdif_rec_wav::end_recording();
                 } else if (start_standby) {
                     printf("standby cancelled\r\n");
                     start_standby = false;
                 }
             } else if (c == 'r') {
-                if (!record_wav::is_recording()) {
+                if (!spdif_rec_wav::is_recording()) {
                     if (bits_per_sample == WAV_16BITS) {
                         bits_per_sample = WAV_24BITS;
                     } else {
@@ -163,7 +163,7 @@ int main()
                 uart_getc(uart0);
             }
         }
-        if (record_wav::is_recording()) {
+        if (spdif_rec_wav::is_recording()) {
             gpio_put(PIN_LED, (_millis() / 500) % 2 == 0);
         } else {
             gpio_put(PIN_LED, false);

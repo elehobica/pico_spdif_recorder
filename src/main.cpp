@@ -65,7 +65,7 @@ void fatfs_config()
         PIN_SPI0_CS_DEFAULT,
         PIN_SPI0_SCK_DEFAULT,
         PIN_SPI0_MOSI_DEFAULT,
-        true
+        true  // use internal pullup
     };
     pico_fatfs_set_config(&fatfs_spi_config);
 }

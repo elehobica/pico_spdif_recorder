@@ -84,10 +84,10 @@ void spdif_rec_wav::process_loop()
                     while (queue_level > 0) {
                         sub_frame_buf_info_t buf_info;
                         queue_remove_blocking(&_spdif_queue, &buf_info);
-                        if (queue_level == 1 || buf_info.buf_id >= NUM_SUB_FRAME_BUF - 1) {
+                        if (queue_level == 1 || buf_info.buf_id >= NUM_SUB_FRAME_BUF - 1 || buf_accum >= NUM_SUB_FRAME_BUF/2) {
                             fr = inst->write(next_buf, buf_info.sub_frame_count * buf_accum);
-                            total_count += buf_info.sub_frame_count * buf_accum;
                             if (fr != FR_OK) printf("error 4\r\n");
+                            total_count += buf_info.sub_frame_count * buf_accum;
                             next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF)];
                             break;
                         } else {

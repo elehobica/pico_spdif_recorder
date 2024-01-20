@@ -50,13 +50,21 @@ public:
     virtual ~spdif_rec_wav();
 
 private:
+    enum class blank_status_t {
+        NOT_BLANK = 0,
+        BLANK_DETECTED,
+        BLANK_SKIP,
+        BLANK_END_DETECTED
+    };
+
     static constexpr int NUM_CHANNELS = 2;
     static constexpr int NUM_SUB_FRAME_BUF = 96; // maximize buffers to the limit for the margin of writing latency as much as possible
     static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
     static constexpr int RECORD_WAV_CMD_QUEUE_LENGTH = 2;
     static constexpr int WAV_HEADER_SIZE = 44;
     static constexpr int BLANK_LEVEL_THRESHOLD = 16;  // level to detect blank supposing 16bit data
-    static constexpr float BLANK_TIME_THREHOLD = 0.5;  // sec
+    static constexpr float BLANK_TIME_THREHOLD = 0.5;  // sec to detect the blank
+    static constexpr float BLANK_SKIP_TIME_THREHOLD = 30.0;  // sec to skip recording if blank time is longer than this
     static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
     static int _sub_frame_buf_id;
     static uint32_t _wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
@@ -73,7 +81,7 @@ private:
     float          _blank_time;
 
     static void push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
-    bool detect_blank_end(const uint32_t* buff, const uint32_t sub_frame_count);
+    blank_status_t get_blank_status(const uint32_t* buff, const uint32_t sub_frame_count);
     uint32_t write(const uint32_t* buff, const uint32_t sub_frame_count);
     FRESULT finalize(const int num_samp);
 

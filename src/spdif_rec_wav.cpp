@@ -103,10 +103,13 @@ void spdif_rec_wav::process_loop(const char* prefix)
                         sub_frame_buf_info_t buf_info;
                         if (_blank_split) {
                             queue_peek_blocking(&_spdif_queue, &buf_info);
-                            bool split_flag = inst->detect_blank_end(&_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id], buf_info.sub_frame_count);
-                            if (split_flag) {
+                            blank_status_t blank_status = inst->get_blank_status(&_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id], buf_info.sub_frame_count);
+                            if (blank_status == blank_status_t::BLANK_END_DETECTED) {
                                 end_recording();
                                 start_recording(bits_per_sample);
+                                break;
+                            } else if (blank_status == blank_status_t::BLANK_SKIP) {
+                                end_recording();
                                 break;
                             }
                         }
@@ -305,10 +308,10 @@ spdif_rec_wav::~spdif_rec_wav()
 /*--------------------/
 /  Member functions
 /--------------------*/
-bool spdif_rec_wav::detect_blank_end(const uint32_t* buff, const uint32_t sub_frame_count)
+spdif_rec_wav::blank_status_t spdif_rec_wav::get_blank_status(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     uint32_t data_accum = 0;
-    bool flag = false;
+    blank_status_t status = blank_status_t::NOT_BLANK;
 
     for (int i = 0; i < sub_frame_count; i++) {
         data_accum += std::abs((int16_t) ((buff[i] >> 12) & 0xffff));
@@ -318,18 +321,19 @@ bool spdif_rec_wav::detect_blank_end(const uint32_t* buff, const uint32_t sub_fr
     if (ave_level < BLANK_LEVEL_THRESHOLD) {
         _is_blank = true;
         _blank_time += (float) sub_frame_count / NUM_CHANNELS / _sample_freq;
+        status = (_blank_time > BLANK_SKIP_TIME_THREHOLD) ? blank_status_t::BLANK_SKIP : blank_status_t::BLANK_DETECTED;
     } else {
         if (_blank_time > BLANK_TIME_THREHOLD) {
             if (_verbose) {
                 printf("detected blank end\r\n");
             }
-            flag = true;
+            status = blank_status_t::BLANK_END_DETECTED;
         }
         _is_blank = false;
         _blank_time = 0.0f;
     }
 
-    return flag;
+    return status;
 }
 
 uint32_t spdif_rec_wav::write(const uint32_t* buff, const uint32_t sub_frame_count)

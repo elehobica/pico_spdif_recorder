@@ -12,7 +12,8 @@
 
 typedef enum _record_wav_cmd_t {
     START_CMD = 0,
-    END_CMD
+    END_CMD,
+    VERBOSE_CMD
 } record_wav_cmd_t;
 typedef struct _record_wav_cmd_data_t {
     record_wav_cmd_t cmd;
@@ -37,12 +38,13 @@ void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_
 class spdif_rec_wav
 {
 public:
-    static void process_loop();
+    static void process_loop(const char* prefix = "record");
     static void start_recording(const uint16_t bits_per_sample);
     static void end_recording();
+    static void set_verbose(const bool flag);
     static bool is_recording();
 
-    spdif_rec_wav(const char *filename, const uint32_t sample_rate, const uint16_t bits_per_sample);
+    spdif_rec_wav(const char* filename, const uint32_t sample_rate, const uint16_t bits_per_sample);
     virtual ~spdif_rec_wav();
 
 private:

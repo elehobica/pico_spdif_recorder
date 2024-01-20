@@ -104,6 +104,7 @@ int main()
     int count = 0;
     bool start_standby = false;
     uint16_t bits_per_sample = WAV_16BITS;
+    bool verbose = false;
 
     // Discard any input.
     while (uart_is_readable(uart0)) {
@@ -131,22 +132,18 @@ int main()
         }
         if (uart_is_readable(uart0)) {
             char c = uart_getc(uart0);
-            if (c == 's') {
-                if (!spdif_rec_wav::is_recording()) {
-                    if (spdif_rx_get_state() == SPDIF_RX_STATE_STABLE) {
-                        spdif_rec_wav::start_recording(bits_per_sample);
-                        start_standby = false;
-                    } else {
-                        printf("standby start when stable sync detected\r\n");
-                        start_standby = true;
-                    }
-                }
-            } else if (c == 'e') {
+            if (c == ' ') {
                 if (spdif_rec_wav::is_recording()) {
                     spdif_rec_wav::end_recording();
                 } else if (start_standby) {
                     printf("standby cancelled\r\n");
                     start_standby = false;
+                } else if (spdif_rx_get_state() == SPDIF_RX_STATE_STABLE) {
+                    spdif_rec_wav::start_recording(bits_per_sample);
+                    start_standby = false;
+                } else {
+                    printf("standby start when stable sync detected\r\n");
+                    start_standby = true;
                 }
             } else if (c == 'r') {
                 if (!spdif_rec_wav::is_recording()) {
@@ -157,6 +154,9 @@ int main()
                     }
                     printf("bit resolution: %d bits\r\n", bits_per_sample);
                 }
+            } else if (c == 'v') {
+                verbose = !verbose;
+                spdif_rec_wav::set_verbose(verbose);
             }
             // Discard any input of the rest.
             while (uart_is_readable(uart0)) {

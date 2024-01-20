@@ -6,8 +6,14 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 #include "spdif_rec_wav.h"
 #include "fatfs/ff.h"
+
+static inline uint64_t _micros(void)
+{
+    return to_us_since_boot(get_absolute_time());
+}
 
 /*---------------------------------------/
 /  Global callback function by spdif_rx
@@ -30,7 +36,7 @@ queue_t  spdif_rec_wav::_record_wav_cmd_queue;
 /*-----------------/
 /  Class functions
 /-----------------*/
-void spdif_rec_wav::process_loop()
+void spdif_rec_wav::process_loop(const char* prefix)
 {
     spdif_rec_wav *inst = nullptr;
     FATFS fs;
@@ -40,6 +46,7 @@ void spdif_rec_wav::process_loop()
     char filename[16];
     uint32_t samp_freq;
     uint16_t bits_per_sample = WAV_16BITS;
+    bool verbose = false;
 
     // Mount FATFS
     fr = f_mount(&fs, "", 1);
@@ -62,30 +69,56 @@ void spdif_rec_wav::process_loop()
     while (true) {
         if (queue_get_level(&_record_wav_cmd_queue) > 0) {
             queue_remove_blocking(&_record_wav_cmd_queue, &cmd_data);
+            if (cmd_data.cmd == VERBOSE_CMD) {
+                verbose = (bool) cmd_data.param1;
+                printf("verbose: %s\r\n", verbose ? "on" : "off");
+            }
             if (cmd_data.cmd != START_CMD) continue;
 
             samp_freq = cmd_data.param1;
             bits_per_sample = cmd_data.param2;
             int total_count = 0;
-            sprintf(filename, "test%d.wav", suffix);
+            uint32_t total_time_us = 0;
+            uint32_t total_bytes = 0;
+            float best_bw = -INFINITY;
+            float worst_bw = INFINITY;
+            uint queue_worst = 0;
+            sprintf(filename, "%s%03d.wav", prefix, suffix);
             inst = new spdif_rec_wav(filename, samp_freq, bits_per_sample);
             if (inst == nullptr) {
                 printf("error1 %d\r\n", fr);
                 return;
             }
             _recording_flag = true;
-            printf("start recording %s @ %d bits %d Hz\r\n", filename, bits_per_sample, samp_freq);
+            printf("start recording \"%s\" @ %d bits %d Hz (bitrate: %d bps)\r\n", filename, bits_per_sample, samp_freq, bits_per_sample*samp_freq*2);
+            if (verbose) {
+                printf("wav bw required:  %7.2f KB/s\r\n", (float) (bits_per_sample*samp_freq*2/8) / 1e3);
+            }
 
             uint32_t *next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
             while (true) {
                 uint queue_level = queue_get_level(&_spdif_queue);
+                if (queue_level > queue_worst) queue_worst = queue_level;
                 if (queue_level >= NUM_SUB_FRAME_BUF/2) {
                     int buf_accum = 1;
                     while (queue_level > 0) {
                         sub_frame_buf_info_t buf_info;
                         queue_remove_blocking(&_spdif_queue, &buf_info);
                         if (queue_level == 1 || buf_info.buf_id >= NUM_SUB_FRAME_BUF - 1 || buf_accum >= NUM_SUB_FRAME_BUF/2) {
+                            uint64_t start_time = _micros();
                             fr = inst->write(next_buf, buf_info.sub_frame_count * buf_accum);
+                            uint32_t t_us = (uint32_t) (_micros() - start_time);
+                            uint32_t bytes = buf_info.sub_frame_count * buf_accum * 4;
+                            float bw = (float) bytes / t_us * 1e3;
+                            if (bw > best_bw) best_bw = bw;
+                            if (bw < worst_bw) {
+                                worst_bw = bw;
+                                if (verbose) {
+                                    printf("worst bw updated: %7.2f KB/s\r\n", worst_bw);
+                                }
+                            }
+                            total_time_us += t_us;
+                            total_bytes += bytes;
                             if (fr != FR_OK) printf("error 4\r\n");
                             total_count += buf_info.sub_frame_count * buf_accum;
                             next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF)];
@@ -94,11 +127,16 @@ void spdif_rec_wav::process_loop()
                             buf_accum++;
                         }
                         queue_level = queue_get_level(&_spdif_queue);
+                        if (queue_level > queue_worst) queue_worst = queue_level;
                     }
                 }
 
                 if (queue_get_level(&_record_wav_cmd_queue) > 0) {
                     queue_remove_blocking(&_record_wav_cmd_queue, &cmd_data);
+                    if (cmd_data.cmd == VERBOSE_CMD) {
+                        verbose = (bool) cmd_data.param1;
+                        printf("verbose: %s\r\n", verbose ? "on" : "off");
+                    }
                     if (cmd_data.cmd == END_CMD) break;
                 }
             }
@@ -109,8 +147,19 @@ void spdif_rec_wav::process_loop()
                 printf("error3 %d\r\n", fr);
                 return;
             }
+            delete inst;
             inst = nullptr;
-            printf("recording done %s\r\n", filename);
+            printf("recording done \"%s\" %d bytes\r\n", filename, total_bytes);
+            if (verbose) {
+                float avg_bw = (float) total_bytes / total_time_us * 1e3;
+                printf("SD Card writing bandwidth\r\n");
+                printf(" avg:   %7.2f KB/s\r\n", avg_bw);
+                printf(" best:  %7.2f KB/s\r\n", best_bw);
+                printf(" worst: %7.2f KB/s\r\n", worst_bw);
+                printf("WAV file required bandwidth\r\n");
+                printf(" wav:   %7.2f KB/s\r\n", (float) (bits_per_sample*samp_freq*2/8) / 1e3);
+                printf("spdif queue usage: %7.2f %%\r\n", (float) queue_worst / SPDIF_QUEUE_LENGTH * 100);
+            }
             suffix++;
         }
         sleep_ms(10);
@@ -152,6 +201,15 @@ void spdif_rec_wav::end_recording()
     queue_try_add(&_record_wav_cmd_queue, &cmd_data);
 }
 
+void spdif_rec_wav::set_verbose(const bool flag)
+{
+    record_wav_cmd_data_t cmd_data;
+    cmd_data.cmd = VERBOSE_CMD;
+    cmd_data.param1 = (uint32_t) flag;
+    cmd_data.param2 = 0L;
+    queue_try_add(&_record_wav_cmd_queue, &cmd_data);
+}
+
 bool spdif_rec_wav::is_recording()
 {
     return _recording_flag;
@@ -160,7 +218,7 @@ bool spdif_rec_wav::is_recording()
 /*-----------------/
 /  Constructor
 /-----------------*/
-spdif_rec_wav::spdif_rec_wav(const char *filename, const uint32_t sample_freq, const uint16_t bits_per_sample)
+spdif_rec_wav::spdif_rec_wav(const char* filename, const uint32_t sample_freq, const uint16_t bits_per_sample)
  : _sample_freq(sample_freq), _bits_per_sample(bits_per_sample)
 {
     FRESULT fr;     /* FatFs return code */

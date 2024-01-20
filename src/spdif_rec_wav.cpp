@@ -78,8 +78,8 @@ void spdif_rec_wav::process_loop(const char* prefix)
             samp_freq = cmd_data.param1;
             bits_per_sample = cmd_data.param2;
             int total_count = 0;
-            uint32_t total_time_us = 0;
             uint32_t total_bytes = 0;
+            uint32_t total_time_us = 0;
             float best_bw = -INFINITY;
             float worst_bw = INFINITY;
             uint queue_worst = 0;
@@ -105,10 +105,10 @@ void spdif_rec_wav::process_loop(const char* prefix)
                         sub_frame_buf_info_t buf_info;
                         queue_remove_blocking(&_spdif_queue, &buf_info);
                         if (queue_level == 1 || buf_info.buf_id >= NUM_SUB_FRAME_BUF - 1 || buf_accum >= NUM_SUB_FRAME_BUF/2) {
+                            uint32_t sub_frame_count = buf_info.sub_frame_count * buf_accum;
                             uint64_t start_time = _micros();
-                            fr = inst->write(next_buf, buf_info.sub_frame_count * buf_accum);
+                            uint32_t bytes = inst->write(next_buf, sub_frame_count);
                             uint32_t t_us = (uint32_t) (_micros() - start_time);
-                            uint32_t bytes = buf_info.sub_frame_count * buf_accum * 4;
                             float bw = (float) bytes / t_us * 1e3;
                             if (bw > best_bw) best_bw = bw;
                             if (bw < worst_bw) {
@@ -117,10 +117,9 @@ void spdif_rec_wav::process_loop(const char* prefix)
                                     printf("worst bw updated: %7.2f KB/s\r\n", worst_bw);
                                 }
                             }
-                            total_time_us += t_us;
                             total_bytes += bytes;
-                            if (fr != FR_OK) printf("error 4\r\n");
-                            total_count += buf_info.sub_frame_count * buf_accum;
+                            total_time_us += t_us;
+                            total_count += sub_frame_count;
                             next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF)];
                             break;
                         } else {
@@ -149,7 +148,9 @@ void spdif_rec_wav::process_loop(const char* prefix)
             }
             delete inst;
             inst = nullptr;
-            printf("recording done \"%s\" %d bytes\r\n", filename, total_bytes);
+            uint32_t total_sec = total_bytes / (bits_per_sample/8) / NUM_CHANNELS / samp_freq;
+            uint32_t total_sec_dp = (uint64_t) total_bytes / (bits_per_sample/8) / NUM_CHANNELS * 1000 / samp_freq - total_sec*1000;
+            printf("recording done \"%s\" %d bytes (time:  %d:%02d.%03d)\r\n", filename, total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
             if (verbose) {
                 float avg_bw = (float) total_bytes / total_time_us * 1e3;
                 printf("SD Card writing bandwidth\r\n");
@@ -224,8 +225,7 @@ spdif_rec_wav::spdif_rec_wav(const char* filename, const uint32_t sample_freq, c
     FRESULT fr;     /* FatFs return code */
     UINT br;
     UINT bw;
-    constexpr int BUF_SIZE = 44;
-    uint8_t buf[BUF_SIZE];
+    uint8_t buf[WAV_HEADER_SIZE];
     uint16_t u16;
     uint32_t u32;
 
@@ -291,7 +291,7 @@ spdif_rec_wav::~spdif_rec_wav()
 /*--------------------/
 /  Member functions
 /--------------------*/
-FRESULT spdif_rec_wav::write(const uint32_t* buff, const uint32_t sub_frame_count)
+uint32_t spdif_rec_wav::write(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     FRESULT fr;     /* FatFs return code */
     UINT br;
@@ -303,7 +303,7 @@ FRESULT spdif_rec_wav::write(const uint32_t* buff, const uint32_t sub_frame_coun
             _wav_buf[i/2] |= ((buff[i] >> 12) & 0xffff) << 16;
         }
         fr = f_write(&_fil, (const void *) _wav_buf, sub_frame_count*2, &bw);
-        if (fr != FR_OK || bw != sub_frame_count*2) return fr;
+        if (fr != FR_OK || bw != sub_frame_count*2) printf("error 4\r\n");
     } else if (_bits_per_sample == WAV_24BITS) {
         for (int i = 0, j = 0; i < sub_frame_count; i += 4, j += 3) {
             _wav_buf[j+0] = (((buff[i+1] >> 4) & 0x0000ff) << 24) | (((buff[i+0] >> 4) & 0xffffff) >>  0);
@@ -311,10 +311,10 @@ FRESULT spdif_rec_wav::write(const uint32_t* buff, const uint32_t sub_frame_coun
             _wav_buf[j+2] = (((buff[i+3] >> 4) & 0xffffff) <<  8) | (((buff[i+2] >> 4) & 0xff0000) >> 16);
         }
         fr = f_write(&_fil, (const void *) _wav_buf, sub_frame_count*3, &bw);
-        if (fr != FR_OK || bw != sub_frame_count*3) return fr;
+        if (fr != FR_OK || bw != sub_frame_count*3) printf("error 4\r\n");
     }
 
-    return FR_OK;
+    return (uint32_t) bw;
 }
 
 FRESULT spdif_rec_wav::finalize(const int num_samp)

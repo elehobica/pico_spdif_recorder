@@ -105,7 +105,6 @@ int main()
     bool standby = false;
     bool standby_repeat = true;
     uint16_t bits_per_sample = WAV_16BITS;
-    bool verbose = false;
 
     // Discard any input.
     while (uart_is_readable(uart0)) {
@@ -161,8 +160,13 @@ int main()
                     printf("bit resolution: %d bits\r\n", bits_per_sample);
                 }
             } else if (c == 'v') {
-                verbose = !verbose;
+                bool verbose = !spdif_rec_wav::get_verbose();
                 spdif_rec_wav::set_verbose(verbose);
+                printf("verbose: %s\r\n", verbose ? "on" : "off");
+            } else if (c == 'b') {
+                bool blank_split = !spdif_rec_wav::get_blank_split();
+                spdif_rec_wav::set_blank_split(blank_split);
+                printf("blank split: %s\r\n", blank_split ? "on" : "off");
             }
             // Discard any input of the rest.
             while (uart_is_readable(uart0)) {

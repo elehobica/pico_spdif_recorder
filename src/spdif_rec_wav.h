@@ -12,8 +12,7 @@
 
 typedef enum _record_wav_cmd_t {
     START_CMD = 0,
-    END_CMD,
-    VERBOSE_CMD
+    END_CMD
 } record_wav_cmd_t;
 typedef struct _record_wav_cmd_data_t {
     record_wav_cmd_t cmd;
@@ -42,6 +41,9 @@ public:
     static void start_recording(const uint16_t bits_per_sample);
     static void end_recording();
     static void set_verbose(const bool flag);
+    static bool get_verbose();
+    static void set_blank_split(const bool flag);
+    static bool get_blank_split();
     static bool is_recording();
 
     spdif_rec_wav(const char* filename, const uint32_t sample_rate, const uint16_t bits_per_sample);
@@ -51,20 +53,27 @@ private:
     static constexpr int NUM_CHANNELS = 2;
     static constexpr int NUM_SUB_FRAME_BUF = 96; // maximize buffers to the limit for the margin of writing latency as much as possible
     static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
-    static constexpr int RECORD_WAV_CMD_QUEUE_LENGTH = 1;
+    static constexpr int RECORD_WAV_CMD_QUEUE_LENGTH = 2;
     static constexpr int WAV_HEADER_SIZE = 44;
+    static constexpr int BLANK_LEVEL_THRESHOLD = 16;  // level to detect blank supposing 16bit data
+    static constexpr float BLANK_TIME_THREHOLD = 0.5;  // sec
     static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
     static int _sub_frame_buf_id;
     static uint32_t _wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
     static bool _recording_flag;
+    static bool _verbose;
+    static bool _blank_split;
     static queue_t _spdif_queue;
     static queue_t _record_wav_cmd_queue;
 
     FIL _fil;
     const uint32_t _sample_freq;
     const uint16_t _bits_per_sample;
+    bool           _is_blank;
+    float          _blank_time;
 
     static void push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
+    bool detect_blank_end(const uint32_t* buff, const uint32_t sub_frame_count);
     uint32_t write(const uint32_t* buff, const uint32_t sub_frame_count);
     FRESULT finalize(const int num_samp);
 

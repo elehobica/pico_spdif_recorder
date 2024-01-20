@@ -62,9 +62,10 @@ private:
     static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
     static constexpr int RECORD_WAV_CMD_QUEUE_LENGTH = 2;
     static constexpr int WAV_HEADER_SIZE = 44;
-    static constexpr int BLANK_LEVEL_THRESHOLD = 16;  // level to detect blank supposing 16bit data
-    static constexpr float BLANK_TIME_THREHOLD = 0.5;  // sec to detect the blank
-    static constexpr float BLANK_SKIP_TIME_THREHOLD = 30.0;  // sec to skip recording if blank time is longer than this
+    static constexpr int BLANK_LEVEL = 16;  // level to detect blank supposing 16bit data
+    static constexpr float BLANK_SEC = 0.5;  // the seconds to detect the blank
+    static constexpr float BLANK_REPEAT_PROHIBIT_SEC = 10.0;  // the seconds within which detecting blank is prohibited
+    static constexpr float BLANK_SKIP_SEC = 10.0;  // skip recording if blank time is longer than this seconds
     static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
     static int _sub_frame_buf_id;
     static uint32_t _wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
@@ -77,8 +78,8 @@ private:
     FIL _fil;
     const uint32_t _sample_freq;
     const uint16_t _bits_per_sample;
-    bool           _is_blank;
-    float          _blank_time;
+    float          _blank_sec;
+    float          _total_sec;
 
     static void push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
     blank_status_t get_blank_status(const uint32_t* buff, const uint32_t sub_frame_count);

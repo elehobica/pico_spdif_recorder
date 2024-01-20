@@ -242,7 +242,7 @@ bool spdif_rec_wav::is_recording()
 /  Constructor
 /-----------------*/
 spdif_rec_wav::spdif_rec_wav(const char* filename, const uint32_t sample_freq, const uint16_t bits_per_sample)
- : _sample_freq(sample_freq), _bits_per_sample(bits_per_sample), _is_blank(false), _blank_time(0.0f)
+ : _sample_freq(sample_freq), _bits_per_sample(bits_per_sample), _blank_sec(0.0f), _total_sec(0.0f)
 {
     FRESULT fr;     /* FatFs return code */
     UINT br;
@@ -322,21 +322,20 @@ spdif_rec_wav::blank_status_t spdif_rec_wav::get_blank_status(const uint32_t* bu
         data_accum += std::abs((int16_t) ((buff[i] >> 12) & 0xffff));
     }
 
+    float time_sec = (float) sub_frame_count / NUM_CHANNELS / _sample_freq;
+
     uint32_t ave_level = data_accum / sub_frame_count;
-    if (ave_level < BLANK_LEVEL_THRESHOLD) {
-        _is_blank = true;
-        _blank_time += (float) sub_frame_count / NUM_CHANNELS / _sample_freq;
-        status = (_blank_time > BLANK_SKIP_TIME_THREHOLD) ? blank_status_t::BLANK_SKIP : blank_status_t::BLANK_DETECTED;
+    if (ave_level < BLANK_LEVEL) {
+        status = (_blank_sec > BLANK_SKIP_SEC) ? blank_status_t::BLANK_SKIP : blank_status_t::BLANK_DETECTED;
+        _blank_sec += time_sec;
     } else {
-        if (_blank_time > BLANK_TIME_THREHOLD) {
-            if (_verbose) {
-                printf("detected blank end\r\n");
-            }
+        if (_total_sec >= BLANK_REPEAT_PROHIBIT_SEC && _blank_sec > BLANK_SEC) {
+            if (_verbose) printf("detected blank end\r\n");
             status = blank_status_t::BLANK_END_DETECTED;
         }
-        _is_blank = false;
-        _blank_time = 0.0f;
+        _blank_sec = 0.0f;
     }
+    _total_sec += time_sec;
 
     return status;
 }

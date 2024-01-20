@@ -102,7 +102,8 @@ int main()
     multicore_launch_core1(record_wav_process_loop);
 
     int count = 0;
-    bool start_standby = false;
+    bool standby = false;
+    bool standby_repeat = true;
     uint16_t bits_per_sample = WAV_16BITS;
     bool verbose = false;
 
@@ -118,9 +119,9 @@ int main()
         if (stable_flg) {
             stable_flg = false;
             printf("detected stable sync @ %d Hz\r\n", spdif_rx_get_samp_freq());
-            if (start_standby) {
+            if (standby) {
                 spdif_rec_wav::start_recording(bits_per_sample);
-                start_standby = false;
+                standby = false;
             }
         }
         if (lost_stable_flg) {
@@ -128,6 +129,7 @@ int main()
             printf("lost stable sync. waiting for signal\r\n");
             if (spdif_rec_wav::is_recording()) {
                 spdif_rec_wav::end_recording();
+                standby = standby_repeat;
             }
         }
         if (uart_is_readable(uart0)) {
@@ -135,15 +137,19 @@ int main()
             if (c == ' ') {
                 if (spdif_rec_wav::is_recording()) {
                     spdif_rec_wav::end_recording();
-                } else if (start_standby) {
+                    standby_repeat = false;
+                } else if (standby) {
                     printf("standby cancelled\r\n");
-                    start_standby = false;
+                    standby = false;
+                    standby_repeat = false;
                 } else if (spdif_rx_get_state() == SPDIF_RX_STATE_STABLE) {
                     spdif_rec_wav::start_recording(bits_per_sample);
-                    start_standby = false;
+                    standby = false;
+                    standby_repeat = true;
                 } else {
                     printf("standby start when stable sync detected\r\n");
-                    start_standby = true;
+                    standby = true;
+                    standby_repeat = true;
                 }
             } else if (c == 'r') {
                 if (!spdif_rec_wav::is_recording()) {

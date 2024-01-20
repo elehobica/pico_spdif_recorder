@@ -41,7 +41,10 @@ queue_t  spdif_rec_wav::_record_wav_cmd_queue;
 /-----------------*/
 void spdif_rec_wav::process_loop(const char* prefix)
 {
-    spdif_rec_wav *inst = nullptr;
+    // Initialize class variables
+    _recording_flag = false;
+
+    // Local variables for this loop
     FATFS fs;
     FRESULT fr;     /* FatFs return code */
     int suffix = 0;
@@ -49,6 +52,9 @@ void spdif_rec_wav::process_loop(const char* prefix)
     char filename[16];
     uint32_t samp_freq;
     uint16_t bits_per_sample = WAV_16BITS;
+    spdif_rec_wav *inst = nullptr;
+    uint32_t* next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
+    int buf_accum = 1;
 
     // Mount FATFS
     fr = f_mount(&fs, "", 1);
@@ -63,9 +69,6 @@ void spdif_rec_wav::process_loop(const char* prefix)
     queue_init(&_record_wav_cmd_queue, sizeof(record_wav_cmd_data_t), RECORD_WAV_CMD_QUEUE_LENGTH);
 
     printf("spdif_rec_wav process started\r\n");
-
-    // Initialize class variables
-    _recording_flag = false;
 
     // Loop
     while (true) {
@@ -93,14 +96,13 @@ void spdif_rec_wav::process_loop(const char* prefix)
                 printf("wav bw required:  %7.2f KB/s\r\n", (float) (bits_per_sample*samp_freq*2/8) / 1e3);
             }
 
-            uint32_t *next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
             while (true) {
                 uint queue_level = queue_get_level(&_spdif_queue);
                 if (queue_level > queue_worst) queue_worst = queue_level;
                 if (queue_level >= NUM_SUB_FRAME_BUF/2) {
-                    int buf_accum = 1;
                     while (queue_level > 0) {
                         sub_frame_buf_info_t buf_info;
+                        // check blank status
                         if (_blank_split) {
                             queue_peek_blocking(&_spdif_queue, &buf_info);
                             blank_status_t blank_status = inst->get_blank_status(&_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id], buf_info.sub_frame_count);
@@ -113,7 +115,10 @@ void spdif_rec_wav::process_loop(const char* prefix)
                                 break;
                             }
                         }
+                        // get and accumulate buffer
                         queue_remove_blocking(&_spdif_queue, &buf_info);
+                        buf_accum++;
+                        // write file depending on the conditions
                         if (queue_level == 1 || buf_info.buf_id >= NUM_SUB_FRAME_BUF - 1 || buf_accum >= NUM_SUB_FRAME_BUF/2) {
                             uint32_t sub_frame_count = buf_info.sub_frame_count * buf_accum;
                             uint64_t start_time = _micros();
@@ -130,10 +135,10 @@ void spdif_rec_wav::process_loop(const char* prefix)
                             total_bytes += bytes;
                             total_time_us += t_us;
                             total_count += sub_frame_count;
+                            // update head of next buffer point to write
                             next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF)];
+                            buf_accum = 0;
                             break;
-                        } else {
-                            buf_accum++;
                         }
                         queue_level = queue_get_level(&_spdif_queue);
                         if (queue_level > queue_worst) queue_worst = queue_level;

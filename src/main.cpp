@@ -75,6 +75,18 @@ void record_wav_process_loop()
     spdif_rec_wav::process_loop();
 }
 
+void show_help()
+{
+    printf("---------------------------\r\n");
+    printf("[serial interface help]\r\n");
+    printf(" ' ' to start/stop recording\r\n");
+    printf(" 'r' to switch 16/24 bits (while not recording only)\r\n");
+    printf(" 'b' to toggle blank split\r\n");
+    printf(" 'v' to toggle verbose\r\n");
+    printf(" 'h' to show this help\r\n");
+    printf("---------------------------\r\n");
+}
+
 int main()
 {
     stdio_init_all();
@@ -111,7 +123,13 @@ int main()
         uart_getc(uart0);
     }
     printf("\r\n");
-    printf("bit resolution: %d bits\r\n", bits_per_sample);
+    printf("---------------------------\r\n");
+    printf("--- pico_spdif_recorder ---\r\n");
+    printf("---------------------------\r\n");
+    printf(" bit resolution: %d bits\r\n", bits_per_sample);
+    printf(" blank split:    %s\r\n", spdif_rec_wav::get_blank_split() ? "on" : "off");
+    printf(" verbose:        %s\r\n", spdif_rec_wav::get_verbose() ? "on" : "off");
+    show_help();
     while (!uart_is_readable(uart0));
 
     while (true) {
@@ -159,14 +177,16 @@ int main()
                     }
                     printf("bit resolution: %d bits\r\n", bits_per_sample);
                 }
-            } else if (c == 'v') {
-                bool verbose = !spdif_rec_wav::get_verbose();
-                spdif_rec_wav::set_verbose(verbose);
-                printf("verbose: %s\r\n", verbose ? "on" : "off");
             } else if (c == 'b') {
                 bool blank_split = !spdif_rec_wav::get_blank_split();
                 spdif_rec_wav::set_blank_split(blank_split);
                 printf("blank split: %s\r\n", blank_split ? "on" : "off");
+            } else if (c == 'v') {
+                bool verbose = !spdif_rec_wav::get_verbose();
+                spdif_rec_wav::set_verbose(verbose);
+                printf("verbose: %s\r\n", verbose ? "on" : "off");
+            } else if (c == 'h') {
+                show_help();
             }
             // Discard any input of the rest.
             while (uart_is_readable(uart0)) {

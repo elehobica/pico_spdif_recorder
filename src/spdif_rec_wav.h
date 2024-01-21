@@ -40,11 +40,11 @@ public:
     static void process_loop(const char* prefix = "record_");
     static void start_recording(const uint16_t bits_per_sample);
     static void end_recording();
-    static void set_verbose(const bool flag);
-    static bool get_verbose();
+    static bool is_recording();
     static void set_blank_split(const bool flag);
     static bool get_blank_split();
-    static bool is_recording();
+    static void set_verbose(const bool flag);
+    static bool get_verbose();
 
     spdif_rec_wav(const char* filename, const uint32_t sample_rate, const uint16_t bits_per_sample);
     virtual ~spdif_rec_wav();
@@ -70,8 +70,8 @@ private:
     static int _sub_frame_buf_id;
     static uint32_t _wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
     static bool _recording_flag;
-    static bool _verbose;
     static bool _blank_split;
+    static bool _verbose;
     static queue_t _spdif_queue;
     static queue_t _record_wav_cmd_queue;
 

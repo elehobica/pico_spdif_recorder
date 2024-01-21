@@ -31,8 +31,8 @@ uint32_t spdif_rec_wav::_sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
 int      spdif_rec_wav::_sub_frame_buf_id = 0;
 uint32_t spdif_rec_wav::_wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
 bool     spdif_rec_wav::_recording_flag = false;
-bool     spdif_rec_wav:: _verbose = false;
 bool     spdif_rec_wav:: _blank_split = true;
+bool     spdif_rec_wav:: _verbose = false;
 queue_t  spdif_rec_wav::_spdif_queue;
 queue_t  spdif_rec_wav::_record_wav_cmd_queue;
 
@@ -91,7 +91,7 @@ void spdif_rec_wav::process_loop(const char* prefix)
                 return;
             }
             _recording_flag = true;
-            printf("start recording \"%s\" @ %d bits %d Hz (bitrate: %d bps)\r\n", filename, bits_per_sample, samp_freq, bits_per_sample*samp_freq*2);
+            printf("start recording \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", filename, bits_per_sample, (float) samp_freq*1e-3, (float) bits_per_sample*samp_freq*2*1e-3);
             if (_verbose) {
                 printf("wav bw required:  %7.2f KB/s\r\n", (float) (bits_per_sample*samp_freq*2/8) / 1e3);
             }
@@ -213,14 +213,9 @@ void spdif_rec_wav::end_recording()
     queue_try_add(&_record_wav_cmd_queue, &cmd_data);
 }
 
-void spdif_rec_wav::set_verbose(const bool flag)
+bool spdif_rec_wav::is_recording()
 {
-    _verbose = flag;
-}
-
-bool spdif_rec_wav::get_verbose()
-{
-    return _verbose;
+    return _recording_flag;
 }
 
 void spdif_rec_wav::set_blank_split(const bool flag)
@@ -233,9 +228,14 @@ bool spdif_rec_wav::get_blank_split()
     return _blank_split;
 }
 
-bool spdif_rec_wav::is_recording()
+void spdif_rec_wav::set_verbose(const bool flag)
 {
-    return _recording_flag;
+    _verbose = flag;
+}
+
+bool spdif_rec_wav::get_verbose()
+{
+    return _verbose;
 }
 
 /*-----------------/

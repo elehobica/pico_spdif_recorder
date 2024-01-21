@@ -22,7 +22,7 @@ public:
         _24BITS = 24,
     };
 
-    static void process_loop(const char* prefix = "record_");
+    static void process_loop(const char* wav_prefix = "record_", const char* suffix_info_filename = "last_suffix.txt");
     static void start_recording(const bits_per_sample_t bits_per_sample);
     static void end_recording();
     static bool is_recording();
@@ -30,6 +30,8 @@ public:
     static bool get_blank_split();
     static void set_verbose(const bool flag);
     static bool get_verbose();
+    static int get_suffix();
+    static void clear_suffix();
 
     spdif_rec_wav(const char* filename, const uint32_t sample_rate, const bits_per_sample_t bits_per_sample);
     virtual ~spdif_rec_wav();
@@ -64,6 +66,8 @@ private:
     static constexpr float BLANK_SEC = 0.5;  // the seconds to detect the blank
     static constexpr float BLANK_REPEAT_PROHIBIT_SEC = 10.0;  // the seconds within which detecting blank is prohibited
     static constexpr float BLANK_SKIP_SEC = 10.0;  // skip recording if blank time is longer than this seconds
+    static const char* _suffix_info_filename;
+    static int _suffix;
     static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
     static int _sub_frame_buf_id;
     static uint32_t _wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
@@ -79,6 +83,8 @@ private:
     float                   _blank_sec;
     float                   _total_sec;
 
+    static int get_last_suffix();
+    static void set_last_suffix(int suffix);
     static void push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
     blank_status_t get_blank_status(const uint32_t* buff, const uint32_t sub_frame_count);
     uint32_t write(const uint32_t* buff, const uint32_t sub_frame_count);

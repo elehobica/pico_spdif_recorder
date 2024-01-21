@@ -27,29 +27,29 @@ void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_
 /*-----------------/
 /  Class variables
 /-----------------*/
-uint32_t spdif_rec_wav::_sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
-int      spdif_rec_wav::_sub_frame_buf_id = 0;
-uint32_t spdif_rec_wav::_wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
-bool     spdif_rec_wav::_recording_flag = false;
-bool     spdif_rec_wav:: _blank_split = true;
-bool     spdif_rec_wav:: _verbose = false;
-queue_t  spdif_rec_wav::_spdif_queue;
-queue_t  spdif_rec_wav::_cmd_queue;
+const char* spdif_rec_wav::_suffix_info_filename;
+int         spdif_rec_wav::_suffix;
+uint32_t    spdif_rec_wav::_sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
+int         spdif_rec_wav::_sub_frame_buf_id = 0;
+uint32_t    spdif_rec_wav::_wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
+bool        spdif_rec_wav::_recording_flag = false;
+bool        spdif_rec_wav:: _blank_split = true;
+bool        spdif_rec_wav:: _verbose = false;
+queue_t     spdif_rec_wav::_spdif_queue;
+queue_t     spdif_rec_wav::_cmd_queue;
 
 /*-----------------/
 /  Class functions
 /-----------------*/
-void spdif_rec_wav::process_loop(const char* prefix)
+void spdif_rec_wav::process_loop(const char* wav_prefix, const char* suffix_info_filename)
 {
     // Initialize class variables
+    _suffix_info_filename = suffix_info_filename;
     _recording_flag = false;
 
     // Local variables for this loop
     FATFS fs;
-    FRESULT fr;     /* FatFs return code */
-    int suffix = 0;
-    cmd_data_t cmd_data;
-    char filename[16];
+    char wav_filename[16];
     uint32_t samp_freq;
     bits_per_sample_t bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
     spdif_rec_wav *inst = nullptr;
@@ -57,12 +57,14 @@ void spdif_rec_wav::process_loop(const char* prefix)
     int buf_accum = 1;
 
     // Mount FATFS
-    fr = f_mount(&fs, "", 1);
+    FRESULT fr = f_mount(&fs, "", 1);
     if (fr != FR_OK) {
         printf("FATFS mount error %d\r\n", fr);
         return;
     }
     printf("FATFS mount ok\r\n");
+
+    _suffix = get_last_suffix() + 1;
 
     // Initialize queues
     queue_init(&_spdif_queue, sizeof(sub_frame_buf_info_t), SPDIF_QUEUE_LENGTH);
@@ -73,6 +75,7 @@ void spdif_rec_wav::process_loop(const char* prefix)
     // Loop
     while (true) {
         if (queue_get_level(&_cmd_queue) > 0) {
+            cmd_data_t cmd_data;
             queue_remove_blocking(&_cmd_queue, &cmd_data);
             if (cmd_data.cmd != cmd_type_t::START_CMD) continue;
 
@@ -84,17 +87,18 @@ void spdif_rec_wav::process_loop(const char* prefix)
             float best_bw = -INFINITY;
             float worst_bw = INFINITY;
             uint queue_worst = 0;
-            sprintf(filename, "%s%03d.wav", prefix, suffix);
-            inst = new spdif_rec_wav(filename, samp_freq, bits_per_sample);
+            sprintf(wav_filename, "%s%03d.wav", wav_prefix, _suffix);
+            inst = new spdif_rec_wav(wav_filename, samp_freq, bits_per_sample);
             if (inst == nullptr) {
                 printf("error1 %d\r\n", fr);
                 return;
             }
             _recording_flag = true;
-            printf("start recording \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", filename, bits_per_sample, (float) samp_freq*1e-3, (float) bits_per_sample*samp_freq*2*1e-3);
+            printf("start recording \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", wav_filename, bits_per_sample, (float) samp_freq*1e-3, (float) bits_per_sample*samp_freq*2*1e-3);
             if (_verbose) {
                 printf("wav bw required:  %7.2f KB/s\r\n", (float) (static_cast<uint32_t>(bits_per_sample)*samp_freq*2/8) / 1e3);
             }
+            set_last_suffix(_suffix);
 
             while (true) {
                 uint queue_level = queue_get_level(&_spdif_queue);
@@ -161,7 +165,7 @@ void spdif_rec_wav::process_loop(const char* prefix)
             inst = nullptr;
             uint32_t total_sec = total_bytes / (static_cast<uint32_t>(bits_per_sample)/8) / NUM_CHANNELS / samp_freq;
             uint32_t total_sec_dp = static_cast<uint64_t>(total_bytes) / (static_cast<uint32_t>(bits_per_sample)/8) / NUM_CHANNELS * 1000 / samp_freq - total_sec*1000;
-            printf("recording done \"%s\" %d bytes (time:  %d:%02d.%03d)\r\n", filename, total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
+            printf("recording done \"%s\" %d bytes (time:  %d:%02d.%03d)\r\n", wav_filename, total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
             if (_verbose) {
                 float avg_bw = (float) total_bytes / total_time_us * 1e3;
                 printf("SD Card writing bandwidth\r\n");
@@ -172,10 +176,50 @@ void spdif_rec_wav::process_loop(const char* prefix)
                 printf(" wav:   %7.2f KB/s\r\n", (float) (static_cast<uint32_t>(bits_per_sample)*samp_freq*2/8) / 1e3);
                 printf("spdif queue usage: %7.2f %%\r\n", (float) queue_worst / SPDIF_QUEUE_LENGTH * 100);
             }
-            suffix++;
+            _suffix++;
         }
         sleep_ms(10);
     }
+}
+
+int spdif_rec_wav::get_last_suffix()
+{
+    FIL fil;
+    FRESULT fr;
+    char buff[16];
+    UINT br;
+    int suffix;
+
+    for ( ; ; ) {
+        fr = f_open(&fil, _suffix_info_filename, FA_READ | FA_OPEN_EXISTING);
+        if (fr != FR_OK) break;
+        fr = f_read(&fil, buff, sizeof(buff), &br);
+        if (fr != FR_OK && br > 0) break;
+        suffix = atoi(buff);
+        f_close(&fil);
+        return suffix;
+    }
+    // no suffix info file or error
+    return -1;
+}
+
+void spdif_rec_wav::set_last_suffix(int suffix)
+{
+    FIL fil;
+    FRESULT fr;
+    char buff[16];
+    UINT bw;
+
+    for ( ; ; ) {
+        fr = f_open(&fil, _suffix_info_filename, FA_WRITE | FA_CREATE_ALWAYS);
+        if (fr != FR_OK) break;
+        sprintf(buff, "%d", suffix);
+        fr = f_write(&fil, buff, sizeof(buff), &bw);
+        if (fr != FR_OK || bw != sizeof(buff)) break;
+        f_close(&fil);
+        return;
+    }
+    // error
 }
 
 void spdif_rec_wav::push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count)
@@ -236,6 +280,16 @@ void spdif_rec_wav::set_verbose(const bool flag)
 bool spdif_rec_wav::get_verbose()
 {
     return _verbose;
+}
+
+int spdif_rec_wav::get_suffix()
+{
+    return _suffix;
+}
+
+void spdif_rec_wav::clear_suffix()
+{
+    _suffix = 0;
 }
 
 /*-----------------/

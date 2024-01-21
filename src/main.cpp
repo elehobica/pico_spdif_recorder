@@ -84,13 +84,16 @@ void show_help(spdif_rec_wav::bits_per_sample_t bits_per_sample)
     printf(" bit resolution: %d bits\r\n", static_cast<int>(bits_per_sample));
     printf(" blank split:    %s\r\n", spdif_rec_wav::get_blank_split() ? "on" : "off");
     printf(" verbose:        %s\r\n", spdif_rec_wav::get_verbose() ? "on" : "off");
+    printf(" suffix to rec:  %03d\r\n", spdif_rec_wav::get_suffix());
     printf("---------------------------\r\n");
     printf("[serial interface help]\r\n");
     printf(" ' ' to start/stop recording\r\n");
-    printf(" 'r' to switch 16/24 bits (not changeable while recording)\r\n");
+    printf(" 'r' to switch 16/24 bits (*)\r\n");
     printf(" 'b' to toggle blank split\r\n");
     printf(" 'v' to toggle verbose\r\n");
+    printf(" 'c' to clear suffix\r\n");
     printf(" 'h' to show this help\r\n");
+    printf("  (*): not effective while recording\r\n");
     printf("---------------------------\r\n");
 }
 
@@ -122,16 +125,18 @@ int main()
     // FATFS config
     fatfs_config();
 
-    sleep_ms(1000);  // wait for USB serial terminal to be responded
+    sleep_ms(500);  // wait for USB serial terminal to be responded
+    printf("\r\n");
 
     // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
     multicore_launch_core1(spdif_rec_wav_process_loop);
 
+    sleep_ms(500);  // wait for FATFS to be mounted
+
     // Discard any input.
     while (getchar_timeout_us(1) >= 0) {};
 
-    printf("\r\n");
     printf("---------------------------\r\n");
     printf("--- pico_spdif_recorder ---\r\n");
     show_help(bits_per_sample);
@@ -192,6 +197,11 @@ int main()
                 bool verbose = !spdif_rec_wav::get_verbose();
                 spdif_rec_wav::set_verbose(verbose);
                 printf("verbose: %s\r\n", verbose ? "on" : "off");
+            } else if (c == 'c') {
+                if (!spdif_rec_wav::is_recording()) {
+                    spdif_rec_wav::clear_suffix();
+                    printf("suffix to rec: %03d\r\n", spdif_rec_wav::get_suffix());
+                }
             } else if (c == 'h') {
                 show_help(bits_per_sample);
             }

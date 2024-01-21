@@ -59,10 +59,10 @@ void spdif_rec_wav::process_loop(const char* prefix)
     // Mount FATFS
     fr = f_mount(&fs, "", 1);
     if (fr != FR_OK) {
-        printf("mount error %d\r\n", fr);
+        printf("FATFS mount error %d\r\n", fr);
         return;
     }
-    printf("mount ok\r\n");
+    printf("FATFS mount ok\r\n");
 
     // Initialize queues
     queue_init(&_spdif_queue, sizeof(sub_frame_buf_info_t), SPDIF_QUEUE_LENGTH);

@@ -18,6 +18,7 @@ static constexpr uint PIN_LED = PICO_DEFAULT_LED_PIN;
 
 static constexpr uint8_t PIN_DCDC_PSM_CTRL = 23;
 static constexpr uint8_t PIN_PICO_SPDIF_RX_DATA = 15;
+static bool core1_running = false;
 volatile static bool stable_flg = false;
 volatile static bool lost_stable_flg = false;
 
@@ -70,9 +71,11 @@ void fatfs_config()
     pico_fatfs_set_config(&fatfs_spi_config);
 }
 
-void record_wav_process_loop()
+void spdif_rec_wav_process_loop()
 {
+    core1_running = true;
     spdif_rec_wav::process_loop();
+    core1_running = false;
 }
 
 void show_help()
@@ -89,6 +92,12 @@ void show_help()
 
 int main()
 {
+    int count = 0;
+    bool standby = false;
+    bool standby_repeat = true;
+    uint16_t bits_per_sample = WAV_16BITS;
+    char c;
+
     stdio_init_all();
 
     // LED
@@ -109,19 +118,15 @@ int main()
     // FATFS config
     fatfs_config();
 
+    sleep_ms(1000);  // wait for USB serial terminal to be responded
+
     // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
-    multicore_launch_core1(record_wav_process_loop);
-
-    int count = 0;
-    bool standby = false;
-    bool standby_repeat = true;
-    uint16_t bits_per_sample = WAV_16BITS;
+    multicore_launch_core1(spdif_rec_wav_process_loop);
 
     // Discard any input.
-    while (uart_is_readable(uart0)) {
-        uart_getc(uart0);
-    }
+    while (getchar_timeout_us(1) >= 0) {};
+
     printf("\r\n");
     printf("---------------------------\r\n");
     printf("--- pico_spdif_recorder ---\r\n");
@@ -130,9 +135,12 @@ int main()
     printf(" blank split:    %s\r\n", spdif_rec_wav::get_blank_split() ? "on" : "off");
     printf(" verbose:        %s\r\n", spdif_rec_wav::get_verbose() ? "on" : "off");
     show_help();
-    while (!uart_is_readable(uart0));
 
     while (true) {
+        if (!core1_running) {
+            printf("ERROR: spdif_rec_wav process_loop exit\r\n");
+            break;
+        }
         if (stable_flg) {
             stable_flg = false;
             printf("detected stable sync @ %d Hz\r\n", spdif_rx_get_samp_freq());
@@ -149,8 +157,7 @@ int main()
                 standby = standby_repeat;
             }
         }
-        if (uart_is_readable(uart0)) {
-            char c = uart_getc(uart0);
+        if ((c = getchar_timeout_us(1)) > 0) {
             if (c == ' ') {
                 if (spdif_rec_wav::is_recording()) {
                     spdif_rec_wav::end_recording();
@@ -189,9 +196,7 @@ int main()
                 show_help();
             }
             // Discard any input of the rest.
-            while (uart_is_readable(uart0)) {
-                uart_getc(uart0);
-            }
+            while (getchar_timeout_us(1) >= 0) {};
         }
         if (spdif_rec_wav::is_recording()) {
             gpio_put(PIN_LED, (_millis() / 500) % 2 == 0);
@@ -204,5 +209,6 @@ int main()
         count++;
     }
 
+    sleep_ms(1000);  // time to output something to serial
     return 0;
 }

@@ -10,26 +10,6 @@
 #include "spdif_rx.h"
 #include "fatfs/ff.h"
 
-typedef enum _record_wav_cmd_t {
-    START_CMD = 0,
-    END_CMD
-} record_wav_cmd_t;
-typedef struct _record_wav_cmd_data_t {
-    record_wav_cmd_t cmd;
-    uint32_t       param1;
-    uint32_t       param2;
-} record_wav_cmd_data_t;
-
-typedef enum _bits_per_sample_t {
-    WAV_16BITS = 16,
-    WAV_24BITS = 24
-} bits_per_sample_t;
-
-typedef struct _sub_frame_buf_info_t {
-    int      buf_id;
-    uint32_t sub_frame_count;
-} sub_frame_buf_info_t;
-
 extern "C" {
 void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err);
 }
@@ -37,8 +17,13 @@ void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_
 class spdif_rec_wav
 {
 public:
+    enum class bits_per_sample_t {
+        _16BITS = 16,
+        _24BITS = 24,
+    };
+
     static void process_loop(const char* prefix = "record_");
-    static void start_recording(const uint16_t bits_per_sample);
+    static void start_recording(const bits_per_sample_t bits_per_sample);
     static void end_recording();
     static bool is_recording();
     static void set_blank_split(const bool flag);
@@ -46,7 +31,7 @@ public:
     static void set_verbose(const bool flag);
     static bool get_verbose();
 
-    spdif_rec_wav(const char* filename, const uint32_t sample_rate, const uint16_t bits_per_sample);
+    spdif_rec_wav(const char* filename, const uint32_t sample_rate, const bits_per_sample_t bits_per_sample);
     virtual ~spdif_rec_wav();
 
 private:
@@ -56,11 +41,24 @@ private:
         BLANK_SKIP,
         BLANK_END_DETECTED
     };
+    enum class cmd_type_t {
+        START_CMD = 0,
+        END_CMD
+    };
+    typedef struct _cmd_data_t {
+        cmd_type_t cmd;
+        uint32_t   param1;
+        uint32_t   param2;
+    } cmd_data_t;
+    typedef struct _sub_frame_buf_info_t {
+        int      buf_id;
+        uint32_t sub_frame_count;
+    } sub_frame_buf_info_t;
 
     static constexpr int NUM_CHANNELS = 2;
     static constexpr int NUM_SUB_FRAME_BUF = 96; // maximize buffers to the limit for the margin of writing latency as much as possible
     static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
-    static constexpr int RECORD_WAV_CMD_QUEUE_LENGTH = 2;
+    static constexpr int CMD_QUEUE_LENGTH = 2;
     static constexpr int WAV_HEADER_SIZE = 44;
     static constexpr int BLANK_LEVEL = 16;  // level to detect blank supposing 16bit data
     static constexpr float BLANK_SEC = 0.5;  // the seconds to detect the blank
@@ -73,13 +71,13 @@ private:
     static bool _blank_split;
     static bool _verbose;
     static queue_t _spdif_queue;
-    static queue_t _record_wav_cmd_queue;
+    static queue_t _cmd_queue;
 
     FIL _fil;
-    const uint32_t _sample_freq;
-    const uint16_t _bits_per_sample;
-    float          _blank_sec;
-    float          _total_sec;
+    const uint32_t          _sample_freq;
+    const bits_per_sample_t _bits_per_sample;
+    float                   _blank_sec;
+    float                   _total_sec;
 
     static void push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
     blank_status_t get_blank_status(const uint32_t* buff, const uint32_t sub_frame_count);

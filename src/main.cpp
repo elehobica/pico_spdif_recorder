@@ -78,12 +78,16 @@ void spdif_rec_wav_process_loop()
     core1_running = false;
 }
 
-void show_help()
+void show_help(spdif_rec_wav::bits_per_sample_t bits_per_sample)
 {
+    printf("---------------------------\r\n");
+    printf(" bit resolution: %d bits\r\n", static_cast<int>(bits_per_sample));
+    printf(" blank split:    %s\r\n", spdif_rec_wav::get_blank_split() ? "on" : "off");
+    printf(" verbose:        %s\r\n", spdif_rec_wav::get_verbose() ? "on" : "off");
     printf("---------------------------\r\n");
     printf("[serial interface help]\r\n");
     printf(" ' ' to start/stop recording\r\n");
-    printf(" 'r' to switch 16/24 bits (while not recording only)\r\n");
+    printf(" 'r' to switch 16/24 bits (not changeable while recording)\r\n");
     printf(" 'b' to toggle blank split\r\n");
     printf(" 'v' to toggle verbose\r\n");
     printf(" 'h' to show this help\r\n");
@@ -95,7 +99,7 @@ int main()
     int count = 0;
     bool standby = false;
     bool standby_repeat = true;
-    uint16_t bits_per_sample = WAV_16BITS;
+    spdif_rec_wav::bits_per_sample_t bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
     char c;
 
     stdio_init_all();
@@ -130,11 +134,7 @@ int main()
     printf("\r\n");
     printf("---------------------------\r\n");
     printf("--- pico_spdif_recorder ---\r\n");
-    printf("---------------------------\r\n");
-    printf(" bit resolution: %d bits\r\n", bits_per_sample);
-    printf(" blank split:    %s\r\n", spdif_rec_wav::get_blank_split() ? "on" : "off");
-    printf(" verbose:        %s\r\n", spdif_rec_wav::get_verbose() ? "on" : "off");
-    show_help();
+    show_help(bits_per_sample);
 
     while (true) {
         if (!core1_running) {
@@ -177,10 +177,10 @@ int main()
                 }
             } else if (c == 'r') {
                 if (!spdif_rec_wav::is_recording()) {
-                    if (bits_per_sample == WAV_16BITS) {
-                        bits_per_sample = WAV_24BITS;
+                    if (bits_per_sample == spdif_rec_wav::bits_per_sample_t::_16BITS) {
+                        bits_per_sample = spdif_rec_wav::bits_per_sample_t::_24BITS;
                     } else {
-                        bits_per_sample = WAV_16BITS;
+                        bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
                     }
                     printf("bit resolution: %d bits\r\n", bits_per_sample);
                 }
@@ -193,7 +193,7 @@ int main()
                 spdif_rec_wav::set_verbose(verbose);
                 printf("verbose: %s\r\n", verbose ? "on" : "off");
             } else if (c == 'h') {
-                show_help();
+                show_help(bits_per_sample);
             }
             // Discard any input of the rest.
             while (getchar_timeout_us(1) >= 0) {};

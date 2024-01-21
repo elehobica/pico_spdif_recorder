@@ -91,9 +91,9 @@ void show_help(spdif_rec_wav::bits_per_sample_t bits_per_sample)
     printf(" 'r' to switch 16/24 bits (*)\r\n");
     printf(" 'b' to toggle blank split\r\n");
     printf(" 'v' to toggle verbose\r\n");
-    printf(" 'c' to clear suffix\r\n");
+    printf(" 'c' to clear suffix (*)\r\n");
     printf(" 'h' to show this help\r\n");
-    printf("  (*): not effective while recording\r\n");
+    printf("  (*) not effective while recording\r\n");
     printf("---------------------------\r\n");
 }
 

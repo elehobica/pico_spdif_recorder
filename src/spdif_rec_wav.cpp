@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cstdarg>
 #include <cmath>
 #include "spdif_rec_wav.h"
 #include "fatfs/ff.h"
@@ -29,6 +30,8 @@ void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_
 /-----------------*/
 const char* spdif_rec_wav::_suffix_info_filename;
 int         spdif_rec_wav::_suffix;
+char        spdif_rec_wav::_log_filename[16];
+bool        spdif_rec_wav::_clear_log;
 uint32_t    spdif_rec_wav::_sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
 int         spdif_rec_wav::_sub_frame_buf_id = 0;
 uint32_t    spdif_rec_wav::_wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
@@ -41,11 +44,12 @@ queue_t     spdif_rec_wav::_cmd_queue;
 /*-----------------/
 /  Class functions
 /-----------------*/
-void spdif_rec_wav::process_loop(const char* wav_prefix, const char* suffix_info_filename)
+void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix, const char* suffix_info_filename)
 {
     // Initialize class variables
     _suffix_info_filename = suffix_info_filename;
     _recording_flag = false;
+    _clear_log = true;
 
     // Local variables for this loop
     FATFS fs;
@@ -64,7 +68,8 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* suffix_info
     }
     printf("FATFS mount ok\r\n");
 
-    _suffix = get_last_suffix() + 1;
+    _suffix = get_last_suffix() + 1;  // initial suffix to start from 1
+    sprintf(_log_filename, "%s%03d.txt", log_prefix, _suffix);
 
     // Initialize queues
     queue_init(&_spdif_queue, sizeof(sub_frame_buf_info_t), SPDIF_QUEUE_LENGTH);
@@ -94,7 +99,10 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* suffix_info
                 return;
             }
             _recording_flag = true;
-            printf("start recording \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", wav_filename, bits_per_sample, (float) samp_freq*1e-3, (float) bits_per_sample*samp_freq*2*1e-3);
+            if (_clear_log) sprintf(_log_filename, "%s%03d.txt", log_prefix, _suffix);
+            log_printf("recording start \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", wav_filename, bits_per_sample, (float) samp_freq*1e-3, (float) bits_per_sample*samp_freq*2*1e-3);
+            _clear_log = false;
+
             if (_verbose) {
                 printf("wav bw required:  %7.2f KB/s\r\n", (float) (static_cast<uint32_t>(bits_per_sample)*samp_freq*2/8) / 1e3);
             }
@@ -165,7 +173,7 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* suffix_info
             inst = nullptr;
             uint32_t total_sec = total_bytes / (static_cast<uint32_t>(bits_per_sample)/8) / NUM_CHANNELS / samp_freq;
             uint32_t total_sec_dp = static_cast<uint64_t>(total_bytes) / (static_cast<uint32_t>(bits_per_sample)/8) / NUM_CHANNELS * 1000 / samp_freq - total_sec*1000;
-            printf("recording done \"%s\" %d bytes (time:  %d:%02d.%03d)\r\n", wav_filename, total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
+            log_printf("recording done \"%s\" %d bytes (time:  %d:%02d.%03d)\r\n", wav_filename, total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
             if (_verbose) {
                 float avg_bw = (float) total_bytes / total_time_us * 1e3;
                 printf("SD Card writing bandwidth\r\n");
@@ -180,6 +188,45 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* suffix_info
         }
         sleep_ms(10);
     }
+}
+
+void spdif_rec_wav::log_printf(const char* fmt, ...)
+{
+    char buff[512];
+    va_list va;
+
+    // variable arg processing
+    va_start(va, fmt);
+    vsprintf(buff, fmt, va);
+    va_end(va);
+
+    // print on serial
+    printf(buff);
+
+    // print on log file
+    for ( ; ; ) {
+        FIL fil;
+        FRESULT fr;
+        UINT bw;
+
+        // File create mode:
+        //  FA_CREATE_ALWAYS: Creates a new file. If the file is existing, it will be truncated and overwritten.
+        //  FA_OPEN_ALWAYS: Opens the file if it is existing. If not, a new file will be created.
+        //  FA_OPEN_APPEND: Same as FA_OPEN_ALWAYS except the read/write pointer is set end of the file.
+        if (_clear_log) {
+            fr = f_open(&fil, _log_filename, FA_WRITE | FA_CREATE_ALWAYS);
+            if (fr != FR_OK) break;
+        } else {
+            fr = f_open(&fil, _log_filename, FA_WRITE | FA_OPEN_APPEND);
+            if (fr != FR_OK) break;
+        }
+        fr = f_write(&fil, buff, strnlen(buff, sizeof(buff)), &bw);
+        if (fr != FR_OK || bw != strnlen(buff, sizeof(buff))) break;
+        f_close(&fil);
+
+        return;
+    }
+    // error
 }
 
 int spdif_rec_wav::get_last_suffix()
@@ -200,7 +247,7 @@ int spdif_rec_wav::get_last_suffix()
         return suffix;
     }
     // no suffix info file or error
-    return -1;
+    return 0;
 }
 
 void spdif_rec_wav::set_last_suffix(int suffix)
@@ -214,8 +261,8 @@ void spdif_rec_wav::set_last_suffix(int suffix)
         fr = f_open(&fil, _suffix_info_filename, FA_WRITE | FA_CREATE_ALWAYS);
         if (fr != FR_OK) break;
         sprintf(buff, "%d", suffix);
-        fr = f_write(&fil, buff, sizeof(buff), &bw);
-        if (fr != FR_OK || bw != sizeof(buff)) break;
+        fr = f_write(&fil, buff, strnlen(buff, sizeof(buff)), &bw);
+        if (fr != FR_OK || bw != strnlen(buff, sizeof(buff))) break;
         f_close(&fil);
         return;
     }
@@ -289,7 +336,8 @@ int spdif_rec_wav::get_suffix()
 
 void spdif_rec_wav::clear_suffix()
 {
-    _suffix = 0;
+    _suffix = 1;
+    _clear_log = true;
 }
 
 /*-----------------/
@@ -306,12 +354,7 @@ spdif_rec_wav::spdif_rec_wav(const char* filename, const uint32_t sample_freq, c
     uint32_t u32;
 
     for ( ; ; ) {
-        fr = f_open(&_fil, filename, FA_READ | FA_WRITE | FA_CREATE_ALWAYS);
-        if (fr != FR_OK) break;
-        fr = f_lseek(&_fil, 0);
-        if (fr != FR_OK) break;
-        fr = f_truncate(&_fil);
-        if (fr != FR_OK) break;
+        fr = f_open(&_fil, filename, FA_WRITE | FA_CREATE_ALWAYS);
 
         // ChunkID
         memcpy(&buf[0], "RIFF", 4);

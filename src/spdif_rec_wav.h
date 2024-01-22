@@ -74,6 +74,7 @@ private:
     static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
     static int _sub_frame_buf_id;
     static uint32_t _wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
+    static bool _standby_flag;
     static bool _recording_flag;
     static bool _blank_split;
     static bool _verbose;

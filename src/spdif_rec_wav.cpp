@@ -35,6 +35,7 @@ bool        spdif_rec_wav::_clear_log;
 uint32_t    spdif_rec_wav::_sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
 int         spdif_rec_wav::_sub_frame_buf_id = 0;
 uint32_t    spdif_rec_wav::_wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
+bool        spdif_rec_wav::_standby_flag = false;
 bool        spdif_rec_wav::_recording_flag = false;
 bool        spdif_rec_wav:: _blank_split = true;
 bool        spdif_rec_wav:: _verbose = false;
@@ -48,6 +49,7 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
 {
     // Initialize class variables
     _suffix_info_filename = suffix_info_filename;
+    _standby_flag = false;
     _recording_flag = false;
     _clear_log = true;
 
@@ -100,9 +102,9 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
                 printf("error1 %d\r\n", fr);
                 return;
             }
-            _recording_flag = true;
 
             if (cmd_data.cmd == cmd_type_t::STANDBY_START_CMD) {
+                _standby_flag = true;
                 while (true) {
                     if (!queue_is_empty(&_spdif_queue)) {
                         sub_frame_buf_info_t buf_info;
@@ -119,6 +121,8 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
                 }
             }
 
+            _recording_flag = true;
+            _standby_flag = false;
             if (_clear_log) sprintf(_log_filename, "%s%03d.txt", log_prefix, _suffix);
             log_printf("recording start \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", wav_filename, bits_per_sample, (float) samp_freq*1e-3, (float) bits_per_sample*samp_freq*2*1e-3);
             _clear_log = false;
@@ -292,7 +296,7 @@ void spdif_rec_wav::set_last_suffix(int suffix)
 
 void spdif_rec_wav::push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count)
 {
-    if (!_recording_flag) return;
+    if (!_standby_flag && !_recording_flag) return;
 
     if (sub_frame_count != SPDIF_BLOCK_SIZE) {
         printf("ERROR: illegal sub_frame_count\r\n");

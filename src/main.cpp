@@ -88,12 +88,14 @@ void show_help(spdif_rec_wav::bits_per_sample_t bits_per_sample)
     printf("---------------------------\r\n");
     printf("[serial interface help]\r\n");
     printf(" ' ' to start/stop recording\r\n");
-    printf(" 'r' to switch 16/24 bits (*)\r\n");
+    printf(" 's' to immediate split of wav file (*1)\r\n");
+    printf(" 'r' to switch 16/24 bits (*2)\r\n");
     printf(" 'b' to toggle blank split\r\n");
     printf(" 'v' to toggle verbose\r\n");
-    printf(" 'c' to clear suffix (*)\r\n");
+    printf(" 'c' to clear suffix (*2)\r\n");
     printf(" 'h' to show this help\r\n");
-    printf("  (*) not effective while recording\r\n");
+    printf("  (*1) not effective unless recording\r\n");
+    printf("  (*2) not effective while recording\r\n");
     printf("---------------------------\r\n");
 }
 
@@ -181,6 +183,11 @@ int main()
                     printf("start when stable sync detected\r\n");
                     wait_sync = true;
                     standby_repeat = true;
+                }
+            } else if (c == 's') {
+                if (spdif_rec_wav::is_recording()) {
+                    spdif_rec_wav::end_recording();
+                    spdif_rec_wav::start_recording(bits_per_sample);
                 }
             } else if (c == 'r') {
                 if (!spdif_rec_wav::is_recording()) {

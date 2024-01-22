@@ -58,7 +58,7 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
     bits_per_sample_t bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
     spdif_rec_wav *inst = nullptr;
     uint32_t* next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
-    int buf_accum = 1;
+    int buf_accum = 0;
 
     // Mount FATFS
     FRESULT fr = f_mount(&fs, "", 1);
@@ -79,11 +79,12 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
 
     // Loop
     while (true) {
-        if (queue_get_level(&_cmd_queue) > 0) {
+        if (!queue_is_empty(&_cmd_queue)) {
             cmd_data_t cmd_data;
             queue_remove_blocking(&_cmd_queue, &cmd_data);
-            if (cmd_data.cmd != cmd_type_t::START_CMD) continue;
+            if (cmd_data.cmd != cmd_type_t::STANDBY_START_CMD && cmd_data.cmd != cmd_type_t::START_CMD) continue;
 
+            // initialize variales for a single wav file
             samp_freq = cmd_data.param1;
             bits_per_sample = static_cast<bits_per_sample_t>(cmd_data.param2);
             uint32_t total_count = 0;
@@ -92,6 +93,7 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
             float best_bw = -INFINITY;
             float worst_bw = INFINITY;
             uint queue_worst = 0;
+
             sprintf(wav_filename, "%s%03d.wav", wav_prefix, _suffix);
             inst = new spdif_rec_wav(wav_filename, samp_freq, bits_per_sample);
             if (inst == nullptr) {
@@ -99,6 +101,24 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
                 return;
             }
             _recording_flag = true;
+
+            if (cmd_data.cmd == cmd_type_t::STANDBY_START_CMD) {
+                while (true) {
+                    if (!queue_is_empty(&_spdif_queue)) {
+                        sub_frame_buf_info_t buf_info;
+                        // check blank status
+                        queue_peek_blocking(&_spdif_queue, &buf_info);
+                        blank_status_t blank_status = inst->get_blank_status(&_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id], buf_info.sub_frame_count);
+                        if (blank_status == blank_status_t::NOT_BLANK || blank_status == blank_status_t::BLANK_END_DETECTED) {
+                            next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id];
+                            buf_accum = 0;
+                            break;
+                        }
+                        queue_remove_blocking(&_spdif_queue, &buf_info);
+                    }
+                }
+            }
+
             if (_clear_log) sprintf(_log_filename, "%s%03d.txt", log_prefix, _suffix);
             log_printf("recording start \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", wav_filename, bits_per_sample, (float) samp_freq*1e-3, (float) bits_per_sample*samp_freq*2*1e-3);
             _clear_log = false;
@@ -124,6 +144,7 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
                                 break;
                             } else if (blank_status == blank_status_t::BLANK_SKIP) {
                                 end_recording();
+                                start_recording(bits_per_sample, true);  // standby start
                                 break;
                             }
                         }
@@ -157,7 +178,7 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
                     }
                 }
 
-                if (queue_get_level(&_cmd_queue) > 0) {
+                if (!queue_is_empty(&_cmd_queue)) {
                     queue_remove_blocking(&_cmd_queue, &cmd_data);
                     if (cmd_data.cmd == cmd_type_t::END_CMD) break;
                 }
@@ -286,10 +307,10 @@ void spdif_rec_wav::push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_
     _sub_frame_buf_id = (_sub_frame_buf_id + 1) % NUM_SUB_FRAME_BUF;
 }
 
-void spdif_rec_wav::start_recording(const bits_per_sample_t bits_per_sample)
+void spdif_rec_wav::start_recording(const bits_per_sample_t bits_per_sample, const bool standby)
 {
     cmd_data_t cmd_data;
-    cmd_data.cmd = cmd_type_t::START_CMD;
+    cmd_data.cmd = standby ? cmd_type_t::STANDBY_START_CMD : cmd_type_t::START_CMD;
     cmd_data.param1 = static_cast<uint32_t>(spdif_rx_get_samp_freq());
     cmd_data.param2 = static_cast<uint32_t>(bits_per_sample);
     queue_try_add(&_cmd_queue, &cmd_data);

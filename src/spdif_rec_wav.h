@@ -23,7 +23,7 @@ public:
     };
 
     static void process_loop(const char* wav_prefix = "record_", const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
-    static void start_recording(const bits_per_sample_t bits_per_sample);
+    static void start_recording(const bits_per_sample_t bits_per_sample, const bool standby = false);
     static void end_recording();
     static bool is_recording();
     static void set_blank_split(const bool flag);
@@ -44,7 +44,8 @@ private:
         BLANK_END_DETECTED
     };
     enum class cmd_type_t {
-        START_CMD = 0,
+        STANDBY_START_CMD = 0,
+        START_CMD,
         END_CMD
     };
     typedef struct _cmd_data_t {

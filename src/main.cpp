@@ -100,7 +100,7 @@ void show_help(spdif_rec_wav::bits_per_sample_t bits_per_sample)
 int main()
 {
     int count = 0;
-    bool standby = false;
+    bool wait_sync = false;
     bool standby_repeat = true;
     spdif_rec_wav::bits_per_sample_t bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
     char c;
@@ -149,9 +149,10 @@ int main()
         if (stable_flg) {
             stable_flg = false;
             printf("detected stable sync @ %d Hz\r\n", spdif_rx_get_samp_freq());
-            if (standby) {
-                spdif_rec_wav::start_recording(bits_per_sample);
-                standby = false;
+            if (wait_sync) {
+                printf("start when sound detected\r\n");
+                spdif_rec_wav::start_recording(bits_per_sample, true);  // standby start
+                wait_sync = false;
             }
         }
         if (lost_stable_flg) {
@@ -159,7 +160,7 @@ int main()
             printf("lost stable sync. waiting for signal\r\n");
             if (spdif_rec_wav::is_recording()) {
                 spdif_rec_wav::end_recording();
-                standby = standby_repeat;
+                wait_sync = standby_repeat;
             }
         }
         if ((c = getchar_timeout_us(1)) > 0) {
@@ -167,17 +168,18 @@ int main()
                 if (spdif_rec_wav::is_recording()) {
                     spdif_rec_wav::end_recording();
                     standby_repeat = false;
-                } else if (standby) {
-                    printf("standby cancelled\r\n");
-                    standby = false;
+                } else if (wait_sync) {
+                    printf("wait_sync cancelled\r\n");
+                    wait_sync = false;
                     standby_repeat = false;
                 } else if (spdif_rx_get_state() == SPDIF_RX_STATE_STABLE) {
-                    spdif_rec_wav::start_recording(bits_per_sample);
-                    standby = false;
+                    printf("start when sound detected\r\n");
+                    spdif_rec_wav::start_recording(bits_per_sample, true);  // standby start
+                    wait_sync = false;
                     standby_repeat = true;
                 } else {
-                    printf("standby start when stable sync detected\r\n");
-                    standby = true;
+                    printf("start when stable sync detected\r\n");
+                    wait_sync = true;
                     standby_repeat = true;
                 }
             } else if (c == 'r') {

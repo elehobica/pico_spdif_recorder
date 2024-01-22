@@ -86,7 +86,7 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
 
             samp_freq = cmd_data.param1;
             bits_per_sample = static_cast<bits_per_sample_t>(cmd_data.param2);
-            int total_count = 0;
+            uint32_t total_count = 0;
             uint32_t total_bytes = 0;
             uint32_t total_time_us = 0;
             float best_bw = -INFINITY;
@@ -347,7 +347,6 @@ spdif_rec_wav::spdif_rec_wav(const char* filename, const uint32_t sample_freq, c
  : _sample_freq(sample_freq), _bits_per_sample(bits_per_sample), _blank_sec(0.0f), _total_sec(0.0f)
 {
     FRESULT fr;     /* FatFs return code */
-    UINT br;
     UINT bw;
     uint8_t buf[WAV_HEADER_SIZE];
     uint16_t u16;
@@ -378,10 +377,10 @@ spdif_rec_wav::spdif_rec_wav(const char* filename, const uint32_t sample_freq, c
         u32 = _sample_freq;  // e.g. 44100
         memcpy(&buf[24], (const void *) &u32, 4);
         // ByteRate
-        u32 = _sample_freq * NUM_CHANNELS * static_cast<uint16_t>(_bits_per_sample) / 8;
+        u32 = _sample_freq * NUM_CHANNELS * (static_cast<uint16_t>(_bits_per_sample)/8);
         memcpy(&buf[28], (const void *) &u32, 4);
         // BlockAlign
-        u16 = NUM_CHANNELS * static_cast<uint16_t>(_bits_per_sample) / 8;
+        u16 = NUM_CHANNELS * (static_cast<uint16_t>(_bits_per_sample)/8);
         memcpy(&buf[32], (const void *) &u16, 2);
         // BitsPerSample
         u16 = static_cast<uint16_t>(_bits_per_sample);
@@ -440,7 +439,6 @@ spdif_rec_wav::blank_status_t spdif_rec_wav::get_blank_status(const uint32_t* bu
 uint32_t spdif_rec_wav::write(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     FRESULT fr;     /* FatFs return code */
-    UINT br;
     UINT bw;
 
     if (_bits_per_sample == spdif_rec_wav::bits_per_sample_t::_16BITS) {
@@ -463,24 +461,24 @@ uint32_t spdif_rec_wav::write(const uint32_t* buff, const uint32_t sub_frame_cou
     return static_cast<uint32_t>(bw);
 }
 
-FRESULT spdif_rec_wav::finalize(const int num_samp)
+FRESULT spdif_rec_wav::finalize(const uint32_t num_samp)
 {
     FRESULT fr;     /* FatFs return code */
-    UINT br;
     UINT bw;
     uint32_t u32;
+    uint32_t data_size = num_samp * NUM_CHANNELS * (static_cast<uint16_t>(_bits_per_sample)/8);  // care of 32bit overflow
 
-    // ChunkSize (temporary 0)
+    // ChunkSize
     fr = f_lseek(&_fil, 4);
     if (fr != FR_OK) return fr;
-    u32 = 36 + num_samp * NUM_CHANNELS * static_cast<uint16_t>(_bits_per_sample) / 8;
+    u32 = data_size + (WAV_HEADER_SIZE - 8);
     fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
     if (fr != FR_OK || bw != sizeof(uint32_t)) return fr;
 
-    // Subchunk2Size (temporary 0)
+    // Subchunk2Size
     fr = f_lseek(&_fil, 40);
     if (fr != FR_OK) return fr;
-    u32 = num_samp * NUM_CHANNELS * static_cast<uint16_t>(_bits_per_sample) / 8;
+    u32 = data_size;
     fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
     if (fr != FR_OK || bw != sizeof(uint32_t)) return fr;
 

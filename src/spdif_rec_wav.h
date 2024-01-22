@@ -91,7 +91,7 @@ private:
     static void push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
     blank_status_t get_blank_status(const uint32_t* buff, const uint32_t sub_frame_count);
     uint32_t write(const uint32_t* buff, const uint32_t sub_frame_count);
-    FRESULT finalize(const int num_samp);
+    FRESULT finalize(const uint32_t num_samp);
 
     friend void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err);
 };

@@ -143,8 +143,7 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
                             queue_peek_blocking(&_spdif_queue, &buf_info);
                             blank_status_t blank_status = inst->get_blank_status(&_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id], buf_info.sub_frame_count);
                             if (blank_status == blank_status_t::BLANK_END_DETECTED) {
-                                end_recording();
-                                start_recording(bits_per_sample);
+                                split_recording(bits_per_sample);
                                 break;
                             } else if (blank_status == blank_status_t::BLANK_SKIP) {
                                 end_recording();
@@ -184,11 +183,11 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
 
                 if (!queue_is_empty(&_cmd_queue)) {
                     queue_remove_blocking(&_cmd_queue, &cmd_data);
-                    if (cmd_data.cmd == cmd_type_t::END_CMD) break;
+                    if (cmd_data.cmd == cmd_type_t::END_CMD || cmd_data.cmd == cmd_type_t::END_FOR_SPLIT_CMD) break;
                 }
             }
 
-            _recording_flag = false;
+            if (cmd_data.cmd == cmd_type_t::END_CMD) _recording_flag = false;
             fr = inst->finalize(total_count);
             if (fr != FR_OK) {
                 printf("error3 %d\r\n", fr);
@@ -320,13 +319,19 @@ void spdif_rec_wav::start_recording(const bits_per_sample_t bits_per_sample, con
     queue_try_add(&_cmd_queue, &cmd_data);
 }
 
-void spdif_rec_wav::end_recording()
+void spdif_rec_wav::end_recording(const bool split)
 {
     cmd_data_t cmd_data;
-    cmd_data.cmd = cmd_type_t::END_CMD;
+    cmd_data.cmd = split ? cmd_type_t::END_FOR_SPLIT_CMD : cmd_type_t::END_CMD;
     cmd_data.param1 = 0L;
     cmd_data.param2 = 0L;
     queue_try_add(&_cmd_queue, &cmd_data);
+}
+
+void spdif_rec_wav::split_recording(const bits_per_sample_t bits_per_sample)
+{
+    end_recording(true);
+    start_recording(bits_per_sample);
 }
 
 bool spdif_rec_wav::is_recording()

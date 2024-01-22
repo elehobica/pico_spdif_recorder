@@ -186,8 +186,7 @@ int main()
                 }
             } else if (c == 's') {
                 if (spdif_rec_wav::is_recording()) {
-                    spdif_rec_wav::end_recording();
-                    spdif_rec_wav::start_recording(bits_per_sample);
+                    spdif_rec_wav::split_recording(bits_per_sample);
                 }
             } else if (c == 'r') {
                 if (!spdif_rec_wav::is_recording()) {

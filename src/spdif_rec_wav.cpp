@@ -58,8 +58,10 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
     char wav_filename[16];
     uint32_t samp_freq;
     bits_per_sample_t bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
+    spdif_rec_wav *inst_prev = nullptr;
     spdif_rec_wav *inst = nullptr;
-    uint32_t* next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
+    spdif_rec_wav *inst_next = nullptr;
+    uint32_t* buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
     int buf_accum = 0;
 
     // Mount FATFS
@@ -89,6 +91,7 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
             // initialize variales for a single wav file
             samp_freq = cmd_data.param1;
             bits_per_sample = static_cast<bits_per_sample_t>(cmd_data.param2);
+            uint32_t total_count_prev = 0;
             uint32_t total_count = 0;
             uint32_t total_bytes = 0;
             uint32_t total_time_us = 0;
@@ -96,8 +99,13 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
             float worst_bw = INFINITY;
             uint queue_worst = 0;
 
-            sprintf(wav_filename, "%s%03d.wav", wav_prefix, _suffix);
-            inst = new spdif_rec_wav(wav_filename, samp_freq, bits_per_sample);
+            if (inst_next == nullptr) {
+                sprintf(wav_filename, "%s%03d.wav", wav_prefix, _suffix);
+                inst = new spdif_rec_wav(wav_filename, samp_freq, bits_per_sample);
+            } else {
+                inst = inst_next;
+                inst_next = nullptr;
+            }
             if (inst == nullptr) {
                 printf("error1 %d\r\n", fr);
                 return;
@@ -112,7 +120,7 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
                         queue_peek_blocking(&_spdif_queue, &buf_info);
                         blank_status_t blank_status = inst->get_blank_status(&_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id], buf_info.sub_frame_count);
                         if (blank_status == blank_status_t::NOT_BLANK || blank_status == blank_status_t::BLANK_END_DETECTED) {
-                            next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id];
+                            buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id];
                             buf_accum = 0;
                             break;
                         }
@@ -158,7 +166,7 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
                         if (queue_level == 1 || buf_info.buf_id >= NUM_SUB_FRAME_BUF - 1 || buf_accum >= NUM_SUB_FRAME_BUF/2) {
                             uint32_t sub_frame_count = buf_info.sub_frame_count * buf_accum;
                             uint64_t start_time = _micros();
-                            uint32_t bytes = inst->write(next_buf, sub_frame_count);
+                            uint32_t bytes = inst->write(buf_ptr, sub_frame_count);
                             uint32_t t_us = static_cast<uint32_t>(_micros() - start_time);
                             float bw = static_cast<float>(bytes) / t_us * 1e3;
                             if (bw > best_bw) best_bw = bw;
@@ -172,29 +180,36 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
                             total_time_us += t_us;
                             total_count += sub_frame_count;
                             // update head of next buffer point to write
-                            next_buf = &_sub_frame_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF)];
+                            buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF)];
                             buf_accum = 0;
                             break;
                         }
                         queue_level = queue_get_level(&_spdif_queue);
                         if (queue_level > queue_worst) queue_worst = queue_level;
                     }
-                }
-
-                if (!queue_is_empty(&_cmd_queue)) {
-                    queue_remove_blocking(&_cmd_queue, &cmd_data);
-                    if (cmd_data.cmd == cmd_type_t::END_CMD || cmd_data.cmd == cmd_type_t::END_FOR_SPLIT_CMD) break;
+                } else if (queue_level <= NUM_SUB_FRAME_BUF/4) {  // find the timing when buffer margin is enough
+                    if (inst_next == nullptr) {
+                        sprintf(wav_filename, "%s%03d.wav", wav_prefix, _suffix + 1);
+                        inst_next = new spdif_rec_wav(wav_filename, samp_freq, bits_per_sample);
+                    } else if (inst_prev != nullptr) {
+                        fr = inst_prev->finalize(total_count_prev);
+                        if (fr != FR_OK) {
+                            printf("error3 %d\r\n", fr);
+                            return;
+                        }
+                        delete inst_prev;
+                        inst_prev = nullptr;
+                        total_count_prev = 0;
+                    } else if (!queue_is_empty(&_cmd_queue)) {
+                        queue_remove_blocking(&_cmd_queue, &cmd_data);
+                        if (cmd_data.cmd == cmd_type_t::END_CMD || cmd_data.cmd == cmd_type_t::END_FOR_SPLIT_CMD) break;
+                    }
                 }
             }
 
             if (cmd_data.cmd == cmd_type_t::END_CMD) _recording_flag = false;
-            fr = inst->finalize(total_count);
-            if (fr != FR_OK) {
-                printf("error3 %d\r\n", fr);
-                return;
-            }
-            delete inst;
-            inst = nullptr;
+            inst_prev = inst;
+            total_count_prev = total_count;
             uint32_t total_sec = total_bytes / (static_cast<uint32_t>(bits_per_sample)/8) / NUM_CHANNELS / samp_freq;
             uint32_t total_sec_dp = static_cast<uint64_t>(total_bytes) / (static_cast<uint32_t>(bits_per_sample)/8) / NUM_CHANNELS * 1000 / samp_freq - total_sec*1000;
             log_printf("recording done \"%s\" %d bytes (time:  %d:%02d.%03d)\r\n", wav_filename, total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
@@ -210,7 +225,6 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
             }
             _suffix++;
         }
-        sleep_ms(10);
     }
 }
 

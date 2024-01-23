@@ -83,7 +83,7 @@ private:
     static queue_t _spdif_queue;
     static queue_t _cmd_queue;
 
-    FIL _fil;
+    FIL                     _fil;
     const uint32_t          _sample_freq;
     const bits_per_sample_t _bits_per_sample;
     float                   _blank_sec;

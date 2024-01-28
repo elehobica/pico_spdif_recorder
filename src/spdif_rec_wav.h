@@ -28,6 +28,7 @@ public:
     static void start_recording(const bits_per_sample_t bits_per_sample, const bool standby = false);
     static void end_recording(const bool split = false);
     static void split_recording(const bits_per_sample_t bits_per_sample);
+    static bool is_standby();
     static bool is_recording();
     static void set_blank_split(const bool flag);
     static bool get_blank_split();
@@ -77,6 +78,8 @@ protected:
     static bool _clear_log;
     static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
     static int _sub_frame_buf_id;
+    static float _blank_sec;
+    static float _blank_scan_sec;
     static uint32_t _wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
     static bool _standby_flag;
     static bool _recording_flag;
@@ -90,19 +93,18 @@ protected:
     const uint32_t          _sample_freq;
     const bits_per_sample_t _bits_per_sample;
     uint32_t                _total_sample_count;
-    float                   _total_elapsed_sec;
     uint32_t                _total_bytes;
     uint32_t                _total_time_us;
-    float                   _blank_sec;
     float                   _best_bandwidth;
     float                   _worst_bandwidth;
     uint                    _queue_worst;
 
+    static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
     static void _log_printf(const char* fmt, ...);
     static int _get_last_suffix();
     static void _set_last_suffix(int suffix);
-    static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
-    blank_status_t _get_blank_status(const uint32_t* buff, const uint32_t sub_frame_count);
+    static blank_status_t _scan_blank(const uint32_t* buff, const uint32_t sub_frame_count, const uint32_t sample_freq);
+    void _reset_blank_scan_sec();
     uint32_t _write_core(const uint32_t* buff, const uint32_t sub_frame_count);
     uint32_t _write(const uint32_t* buff, const uint32_t sub_frame_count);
     void _record_queue_level(uint queue_level);

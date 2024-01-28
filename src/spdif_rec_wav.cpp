@@ -189,6 +189,7 @@ void spdif_rec_wav::process_loop(const char* wav_prefix, const char* log_prefix,
             _suffix++;
         } else {
             if (inst_prev != nullptr) {
+                inst_prev->_report_final();
                 delete inst_prev;
                 inst_prev = nullptr;
             }
@@ -232,7 +233,8 @@ void spdif_rec_wav::_log_printf(const char* fmt, ...)
         }
         fr = f_write(&fil, buff, strnlen(buff, sizeof(buff)), &bw);
         if (fr != FR_OK || bw != strnlen(buff, sizeof(buff))) break;
-        f_close(&fil);
+        fr = f_close(&fil);
+        if (fr != FR_OK) break;
 
         return;
     }
@@ -253,7 +255,8 @@ int spdif_rec_wav::_get_last_suffix()
         fr = f_read(&fil, buff, sizeof(buff), &br);
         if (fr != FR_OK && br > 0) break;
         suffix = atoi(buff);
-        f_close(&fil);
+        fr = f_close(&fil);
+        if (fr != FR_OK) break;
         return suffix;
     }
     // no suffix info file or error
@@ -273,7 +276,8 @@ void spdif_rec_wav::_set_last_suffix(int suffix)
         sprintf(buff, "%d", suffix);
         fr = f_write(&fil, buff, strnlen(buff, sizeof(buff)), &bw);
         if (fr != FR_OK || bw != strnlen(buff, sizeof(buff))) break;
-        f_close(&fil);
+        fr = f_close(&fil);
+        if (fr != FR_OK) break;
         return;
     }
     // error
@@ -433,24 +437,34 @@ spdif_rec_wav::~spdif_rec_wav()
 {
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
-        UINT bw;
-        uint32_t u32;
 
-        // ChunkSize
-        fr = f_lseek(&_fil, 4);
-        if (fr != FR_OK) break;
-        u32 = _total_bytes + (WAV_HEADER_SIZE - 8);
-        fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
-        if (fr != FR_OK || bw != sizeof(uint32_t)) break;
+        if (_total_bytes == 0) {
+            // remove file if no samples
+            fr = f_close(&_fil);
+            if (fr != FR_OK) break;
+            fr = f_unlink(_filename.c_str());
+            if (fr != FR_OK) break;
+        } else {
+            UINT bw;
+            uint32_t u32;
 
-        // Subchunk2Size
-        fr = f_lseek(&_fil, 40);
-        if (fr != FR_OK) break;
-        u32 = _total_bytes;
-        fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
-        if (fr != FR_OK || bw != sizeof(uint32_t)) break;
+            // ChunkSize
+            fr = f_lseek(&_fil, 4);
+            if (fr != FR_OK) break;
+            u32 = _total_bytes + (WAV_HEADER_SIZE - 8);
+            fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
+            if (fr != FR_OK || bw != sizeof(uint32_t)) break;
 
-        f_close(&_fil);
+            // Subchunk2Size
+            fr = f_lseek(&_fil, 40);
+            if (fr != FR_OK) break;
+            u32 = _total_bytes;
+            fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
+            if (fr != FR_OK || bw != sizeof(uint32_t)) break;
+
+            fr = f_close(&_fil);
+            if (fr != FR_OK) break;
+        }
     }
     // error
 }

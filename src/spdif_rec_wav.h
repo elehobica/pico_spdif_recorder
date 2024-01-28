@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "pico/util/queue.h"
 #include "spdif_rx.h"
 #include "fatfs/ff.h"
@@ -34,10 +36,10 @@ public:
     static int get_suffix();
     static void clear_suffix();
 
-    spdif_rec_wav(const char* filename, const uint32_t sample_rate, const bits_per_sample_t bits_per_sample);
+    spdif_rec_wav(const std::string filename, const uint32_t sample_rate, const bits_per_sample_t bits_per_sample);
     virtual ~spdif_rec_wav();
 
-private:
+protected:
     enum class blank_status_t {
         NOT_BLANK = 0,
         BLANK_DETECTED,
@@ -84,18 +86,28 @@ private:
     static queue_t _cmd_queue;
 
     FIL                     _fil;
+    const std::string       _filename;
     const uint32_t          _sample_freq;
     const bits_per_sample_t _bits_per_sample;
+    uint32_t                _total_sample_count;
+    float                   _total_elapsed_sec;
+    uint32_t                _total_bytes;
+    uint32_t                _total_time_us;
     float                   _blank_sec;
-    float                   _total_sec;
+    float                   _best_bandwidth;
+    float                   _worst_bandwidth;
+    uint                    _queue_worst;
 
-    static void log_printf(const char* fmt, ...);
-    static int get_last_suffix();
-    static void set_last_suffix(int suffix);
-    static void push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
-    blank_status_t get_blank_status(const uint32_t* buff, const uint32_t sub_frame_count);
-    uint32_t write(const uint32_t* buff, const uint32_t sub_frame_count);
-    FRESULT finalize(const uint32_t num_samp);
+    static void _log_printf(const char* fmt, ...);
+    static int _get_last_suffix();
+    static void _set_last_suffix(int suffix);
+    static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
+    blank_status_t _get_blank_status(const uint32_t* buff, const uint32_t sub_frame_count);
+    uint32_t _write_core(const uint32_t* buff, const uint32_t sub_frame_count);
+    uint32_t _write(const uint32_t* buff, const uint32_t sub_frame_count);
+    void _record_queue_level(uint queue_level);
+    void _report_start();
+    void _report_final();
 
     friend void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err);
 };

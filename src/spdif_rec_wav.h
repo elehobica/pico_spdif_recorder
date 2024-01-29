@@ -24,7 +24,11 @@ public:
         _24BITS = 24,
     };
 
-    static void process_loop(const char* wav_prefix = "record_", const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
+    // process on core0
+    static void file_cmd_process();
+    // process on core1
+    static void file_reply_cmd_process();
+    static void record_process_loop(const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
     static void start_recording(const bits_per_sample_t bits_per_sample, const bool standby = false);
     static void end_recording(const bool split = false);
     static void split_recording(const bits_per_sample_t bits_per_sample);
@@ -37,27 +41,31 @@ public:
     static int get_suffix();
     static void clear_suffix();
 
-    spdif_rec_wav(const std::string filename, const uint32_t sample_rate, const bits_per_sample_t bits_per_sample);
-    virtual ~spdif_rec_wav();
-
 protected:
+    enum class file_cmd_type_t {
+        PREPARE = 0,
+        FINALIZE
+    };
+    typedef struct _file_cmd_data_t {
+        file_cmd_type_t cmd;
+        uint32_t   param[3];
+    } file_cmd_data_t;
     enum class blank_status_t {
         NOT_BLANK = 0,
         BLANK_DETECTED,
         BLANK_SKIP,
         BLANK_END_DETECTED
     };
-    enum class cmd_type_t {
+    enum class record_cmd_type_t {
         STANDBY_START_CMD = 0,
         START_CMD,
         END_CMD,
         END_FOR_SPLIT_CMD
     };
-    typedef struct _cmd_data_t {
-        cmd_type_t cmd;
-        uint32_t   param1;
-        uint32_t   param2;
-    } cmd_data_t;
+    typedef struct _record_cmd_data_t {
+        record_cmd_type_t cmd;
+        uint32_t   param[2];
+    } record_cmd_data_t;
     typedef struct _sub_frame_buf_info_t {
         int      buf_id;
         uint32_t sub_frame_count;
@@ -66,12 +74,14 @@ protected:
     static constexpr int NUM_CHANNELS = 2;
     static constexpr int NUM_SUB_FRAME_BUF = 96; // maximize buffers to the limit for the margin of writing latency as much as possible
     static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
-    static constexpr int CMD_QUEUE_LENGTH = 2;
+    static constexpr int FILE_CMD_QUEUE_LENGTH = 2;
+    static constexpr int RECORD_CMD_QUEUE_LENGTH = 2;
     static constexpr int WAV_HEADER_SIZE = 44;
     static constexpr int BLANK_LEVEL = 16;  // level to detect blank supposing 16bit data
     static constexpr float BLANK_SEC = 0.5;  // the seconds to detect the blank
     static constexpr float BLANK_REPEAT_PROHIBIT_SEC = 10.0;  // the seconds within which detecting blank is prohibited
     static constexpr float BLANK_SKIP_SEC = 10.0;  // skip recording if blank time is longer than this seconds
+    static constexpr const char* WAV_PREFIX = "record_";
     static const char* _suffix_info_filename;
     static int _suffix;
     static char _log_filename[16];
@@ -86,7 +96,15 @@ protected:
     static bool _blank_split;
     static bool _verbose;
     static queue_t _spdif_queue;
-    static queue_t _cmd_queue;
+    static queue_t _file_cmd_queue;
+    static queue_t _file_cmd_reply_queue;
+    static queue_t _record_cmd_queue;
+    static spdif_rec_wav* _inst_prev;
+    static spdif_rec_wav* _inst;
+    static spdif_rec_wav* _inst_next;
+
+    spdif_rec_wav(const std::string filename, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
+    virtual ~spdif_rec_wav();
 
     FIL                     _fil;
     const std::string       _filename;
@@ -99,6 +117,8 @@ protected:
     float                   _worst_bandwidth;
     uint                    _queue_worst;
 
+    static void _call_prepare_file(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
+    static void _call_finalize_file(const spdif_rec_wav* inst, const bool report_final = false);
     static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
     static void _log_printf(const char* fmt, ...);
     static int _get_last_suffix();

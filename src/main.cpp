@@ -71,10 +71,10 @@ void fatfs_config()
     pico_fatfs_set_config(&fatfs_spi_config);
 }
 
-void spdif_rec_wav_process_loop()
+void spdif_rec_wav_record_process_loop()
 {
     core1_running = true;
-    spdif_rec_wav::process_loop();
+    spdif_rec_wav::record_process_loop();
     core1_running = false;
 }
 
@@ -133,7 +133,7 @@ int main()
 
     // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
-    multicore_launch_core1(spdif_rec_wav_process_loop);
+    multicore_launch_core1(spdif_rec_wav_record_process_loop);
 
     sleep_ms(500);  // wait for FATFS to be mounted
 
@@ -240,6 +240,9 @@ int main()
         } else {
             gpio_put(PIN_LED, false);
         }
+
+        // background file process on core0
+        spdif_rec_wav::file_cmd_process();
 
         tight_loop_contents();
         sleep_ms(10);

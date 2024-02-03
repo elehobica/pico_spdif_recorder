@@ -27,7 +27,6 @@ public:
     // process on core0
     static void file_cmd_process();
     // process on core1
-    static void file_reply_cmd_process();
     static void record_process_loop(const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
     static void start_recording(const bits_per_sample_t bits_per_sample, const bool standby = false);
     static void end_recording(const bool split = false);
@@ -42,10 +41,19 @@ public:
     static void clear_suffix();
 
 protected:
-    enum class call_status_t {
+    enum class inst_status_t {
         RESET = 0,
-        CALLED,
-        DONE
+        REQ_PREPARE,
+        PREPARED,
+        REQ_FINALIZE,
+        FINALIZED
+    };
+    struct inst_with_status_t {
+        spdif_rec_wav* inst;
+        inst_status_t status;
+        inst_with_status_t(inst_status_t status = inst_status_t::RESET) : inst(nullptr), status(status) {}
+        ~inst_with_status_t() {}
+        void reset() { inst = nullptr; status = inst_status_t::RESET; }
     };
     enum class file_cmd_type_t {
         PREPARE = 0,
@@ -53,7 +61,7 @@ protected:
     };
     typedef struct _file_cmd_data_t {
         file_cmd_type_t cmd;
-        uint32_t   param[3];
+        uint32_t   param[4];
     } file_cmd_data_t;
     enum class blank_status_t {
         NOT_BLANK = 0,
@@ -104,11 +112,6 @@ protected:
     static queue_t _file_cmd_queue;
     static queue_t _file_cmd_reply_queue;
     static queue_t _record_cmd_queue;
-    static spdif_rec_wav* _inst_prev;
-    static spdif_rec_wav* _inst;
-    static spdif_rec_wav* _inst_next;
-    static call_status_t _status_prev;
-    static call_status_t _status_next;
 
     spdif_rec_wav(const std::string filename, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     virtual ~spdif_rec_wav();
@@ -124,8 +127,9 @@ protected:
     float                   _worst_bandwidth;
     uint                    _queue_worst;
 
-    static void _call_prepare_file(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
-    static void _call_finalize_file(const spdif_rec_wav* inst, const bool is_prev = true);
+    static void _file_reply_cmd_process();
+    static void _req_prepare_file(inst_with_status_t& inst_w_sts, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
+    static void _req_finalize_file(inst_with_status_t& inst_w_sts, const bool report_final = true);
     static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
     static void _log_printf(const char* fmt, ...);
     static int _get_last_suffix();

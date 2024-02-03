@@ -55,7 +55,7 @@ int ff_cre_syncobj (	/* 1:Function succeeded, 0:Could not create the sync object
 )
 {
 	mutex_init(sobj);
-	return 1;
+	return (int) mutex_is_initialized(sobj);
 
 	/* Win32 */
 //	*sobj = CreateMutex(NULL, FALSE, NULL);
@@ -127,7 +127,7 @@ int ff_req_grant (	/* 1:Got a grant to access the volume, 0:Could not get a gran
 	FF_SYNC_t* sobj	/* Sync object to wait */
 )
 {
-	mutex_enter_blocking(sobj);
+	return (int) mutex_enter_timeout_ms(sobj, FF_FS_TIMEOUT);
 
 	/* Win32 */
 //	return (int)(WaitForSingleObject(sobj, FF_FS_TIMEOUT) == WAIT_OBJECT_0);

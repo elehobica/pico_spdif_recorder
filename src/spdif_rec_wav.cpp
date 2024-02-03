@@ -4,6 +4,7 @@
 / refer to https://opensource.org/licenses/BSD-2-Clause
 /------------------------------------------------------*/
 
+#include <iostream>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -48,6 +49,8 @@ queue_t        spdif_rec_wav::_record_cmd_queue;
 spdif_rec_wav* spdif_rec_wav::_inst_prev = nullptr;
 spdif_rec_wav* spdif_rec_wav::_inst = nullptr;
 spdif_rec_wav* spdif_rec_wav::_inst_next = nullptr;
+spdif_rec_wav::call_status_t spdif_rec_wav::_status_prev = spdif_rec_wav::call_status_t::RESET;
+spdif_rec_wav::call_status_t spdif_rec_wav::_status_next = spdif_rec_wav::call_status_t::RESET;
 
 /*------------------------/
 /  Public class functions
@@ -70,11 +73,11 @@ void spdif_rec_wav::file_cmd_process()
             queue_try_add(&_file_cmd_reply_queue, &cmd_data);
         } else if (cmd_data.cmd == file_cmd_type_t::FINALIZE) {
             spdif_rec_wav* inst =reinterpret_cast<spdif_rec_wav*>(cmd_data.param[0]);
-            bool report_final = static_cast<bool>(cmd_data.param[1]);
-            if (report_final) inst->_report_final();
+            bool is_prev = static_cast<bool>(cmd_data.param[1]);
+            if (is_prev) inst->_report_final();
             delete inst;
             cmd_data.param[0] = 0L;
-            cmd_data.param[1] = 0L;
+            //cmd_data.param[1] = 0L;  // use is_prev
             cmd_data.param[2] = 0L;
             queue_try_add(&_file_cmd_reply_queue, &cmd_data);
         }
@@ -88,8 +91,15 @@ void spdif_rec_wav::file_reply_cmd_process()
         queue_remove_blocking(&_file_cmd_reply_queue, &cmd_data);
         if (cmd_data.cmd == file_cmd_type_t::PREPARE) {
             _inst_next = reinterpret_cast<spdif_rec_wav*>(cmd_data.param[0]);
+            _status_next = call_status_t::DONE;
         } else if (cmd_data.cmd == file_cmd_type_t::FINALIZE) {
-            _inst_prev = nullptr;
+            bool is_prev = static_cast<bool>(cmd_data.param[1]);
+            if (is_prev) {
+                _inst_prev = nullptr;
+                _status_prev = call_status_t::DONE;
+            } else {
+                _inst_next = nullptr;
+            }
         }
     }
 }
@@ -130,6 +140,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
 
     while (queue_is_empty(&_record_cmd_queue)) {}
 
+    /*
     // request first wav file to be created
     {
         record_cmd_data_t record_cmd_data;
@@ -139,6 +150,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
         bits_per_sample = static_cast<bits_per_sample_t>(record_cmd_data.param[1]);
         _call_prepare_file(_suffix, sample_freq, bits_per_sample);
     }
+    */
 
     // Loop
     while (true) {
@@ -198,13 +210,16 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 return;
             }
 #endif
-            while (_inst_next != nullptr) {
+            if (_status_next == call_status_t::RESET) {
+                _call_prepare_file(_suffix, sample_freq, bits_per_sample);
+            }
+            while (_inst_next == nullptr) {
                 file_reply_cmd_process();
             }
             _inst = _inst_next;
             _inst_next = nullptr;
             // prepare next file
-            _call_prepare_file(_suffix, sample_freq, bits_per_sample);
+            _call_prepare_file(_suffix + 1, sample_freq, bits_per_sample);
 
             _recording_flag = true;
             _standby_flag = false;
@@ -267,7 +282,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                         delete _inst_prev;
                         _inst_prev = nullptr;
                         */
-                        _call_finalize_file(_inst_prev, true);
+                        _call_finalize_file(_inst_prev);
                     }
                 }
 #endif
@@ -283,16 +298,18 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 file_reply_cmd_process();
             }
             _inst_prev = _inst;
+            _call_finalize_file(_inst_prev);
+
             if (record_cmd_data.cmd == record_cmd_type_t::END_CMD) {
                 _recording_flag = false;
                 while (_inst_prev != nullptr) {
                     file_reply_cmd_process();
                 }
-                _inst_prev = _inst_next;
-                _call_finalize_file(_inst_next);
-                while (_inst_prev != nullptr) {
+                _call_finalize_file(_inst_next, false);
+                while (_inst_next != nullptr) {
                     file_reply_cmd_process();
                 }
+                _status_next = call_status_t::RESET;
 
                 sleep_ms(1);  // wait for buffer push to stop
                 // drain remained spdif queue to delete samples which should not be included in next wav
@@ -384,16 +401,18 @@ void spdif_rec_wav::_call_prepare_file(const uint32_t suffix, const uint32_t sam
     cmd_data.param[1] = sample_freq;
     cmd_data.param[2] = static_cast<uint32_t>(bits_per_sample);
     queue_try_add(&_file_cmd_queue, &cmd_data);
+    _status_next = call_status_t::CALLED;
 }
 
-void spdif_rec_wav::_call_finalize_file(const spdif_rec_wav* inst, const bool report_final)
+void spdif_rec_wav::_call_finalize_file(const spdif_rec_wav* inst, const bool is_prev)
 {
     file_cmd_data_t cmd_data;
     cmd_data.cmd = file_cmd_type_t::FINALIZE;
     cmd_data.param[0] = reinterpret_cast<uint32_t>(inst);
-    cmd_data.param[1] = static_cast<uint32_t>(report_final);
+    cmd_data.param[1] = static_cast<uint32_t>(is_prev);
     cmd_data.param[2] = 0L;
     queue_try_add(&_file_cmd_queue, &cmd_data);
+    if (is_prev) _status_prev = call_status_t::CALLED;
 }
 
 void spdif_rec_wav::_push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count)

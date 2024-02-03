@@ -5,6 +5,7 @@
 
 
 #include "ff.h"
+#include "pico/mutex.h"
 
 
 #if FF_USE_LFN == 3	/* Dynamic memory allocation */
@@ -48,15 +49,17 @@ void ff_memfree (
 
 //const osMutexDef_t Mutex[FF_VOLUMES];	/* Table of CMSIS-RTOS mutex */
 
-
 int ff_cre_syncobj (	/* 1:Function succeeded, 0:Could not create the sync object */
 	BYTE vol,			/* Corresponding volume (logical drive number) */
 	FF_SYNC_t* sobj		/* Pointer to return the created sync object */
 )
 {
+	mutex_init(sobj);
+	return 1;
+
 	/* Win32 */
-	*sobj = CreateMutex(NULL, FALSE, NULL);
-	return (int)(*sobj != INVALID_HANDLE_VALUE);
+//	*sobj = CreateMutex(NULL, FALSE, NULL);
+//	return (int)(*sobj != INVALID_HANDLE_VALUE);
 
 	/* uITRON */
 //	T_CSEM csem = {TA_TPRI,1,1};
@@ -87,11 +90,14 @@ int ff_cre_syncobj (	/* 1:Function succeeded, 0:Could not create the sync object
 */
 
 int ff_del_syncobj (	/* 1:Function succeeded, 0:Could not delete due to an error */
-	FF_SYNC_t sobj		/* Sync object tied to the logical drive to be deleted */
+	FF_SYNC_t* sobj		/* Sync object tied to the logical drive to be deleted */
 )
 {
+	// no function to delete mutex_t
+	return 1;
+
 	/* Win32 */
-	return (int)CloseHandle(sobj);
+//	return (int)CloseHandle(sobj);
 
 	/* uITRON */
 //	return (int)(del_sem(sobj) == E_OK);
@@ -118,11 +124,13 @@ int ff_del_syncobj (	/* 1:Function succeeded, 0:Could not delete due to an error
 */
 
 int ff_req_grant (	/* 1:Got a grant to access the volume, 0:Could not get a grant */
-	FF_SYNC_t sobj	/* Sync object to wait */
+	FF_SYNC_t* sobj	/* Sync object to wait */
 )
 {
+	mutex_enter_blocking(sobj);
+
 	/* Win32 */
-	return (int)(WaitForSingleObject(sobj, FF_FS_TIMEOUT) == WAIT_OBJECT_0);
+//	return (int)(WaitForSingleObject(sobj, FF_FS_TIMEOUT) == WAIT_OBJECT_0);
 
 	/* uITRON */
 //	return (int)(wai_sem(sobj) == E_OK);
@@ -147,11 +155,13 @@ int ff_req_grant (	/* 1:Got a grant to access the volume, 0:Could not get a gran
 */
 
 void ff_rel_grant (
-	FF_SYNC_t sobj	/* Sync object to be signaled */
+	FF_SYNC_t* sobj	/* Sync object to be signaled */
 )
 {
+	mutex_exit(sobj);
+
 	/* Win32 */
-	ReleaseMutex(sobj);
+//	ReleaseMutex(sobj);
 
 	/* uITRON */
 //	sig_sem(sobj);

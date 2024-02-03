@@ -42,6 +42,11 @@ public:
     static void clear_suffix();
 
 protected:
+    enum class call_status_t {
+        RESET = 0,
+        CALLED,
+        DONE
+    };
     enum class file_cmd_type_t {
         PREPARE = 0,
         FINALIZE
@@ -102,6 +107,8 @@ protected:
     static spdif_rec_wav* _inst_prev;
     static spdif_rec_wav* _inst;
     static spdif_rec_wav* _inst_next;
+    static call_status_t _status_prev;
+    static call_status_t _status_next;
 
     spdif_rec_wav(const std::string filename, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     virtual ~spdif_rec_wav();
@@ -118,7 +125,7 @@ protected:
     uint                    _queue_worst;
 
     static void _call_prepare_file(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
-    static void _call_finalize_file(const spdif_rec_wav* inst, const bool report_final = false);
+    static void _call_finalize_file(const spdif_rec_wav* inst, const bool is_prev = true);
     static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
     static void _log_printf(const char* fmt, ...);
     static int _get_last_suffix();

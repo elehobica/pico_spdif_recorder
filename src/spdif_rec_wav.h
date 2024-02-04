@@ -86,7 +86,12 @@ protected:
         ILLEGAL_SUB_FRAME_COUNT,
         FILE_CMD_QUEUE_FULL,
         FILE_CMD_REPLY_QUEUE_FULL,
-        RECORD_CMD_QUEUE_FULL
+        RECORD_CMD_QUEUE_FULL,
+        WAV_OPEN_FAIL,
+        WAV_DATA_WRITE_FAIL,
+        WAV_DATA_SYNC_FAIL,
+        WAV_CLOSE_FAIL,
+        SUFFIX_FILE_FAIL
     };
     typedef struct _error_packet_t {
         error_type_t type;

@@ -396,6 +396,21 @@ void spdif_rec_wav::_process_error()
         case error_type_t::RECORD_CMD_QUEUE_FULL:
             _log_printf("ERROR: _record_cmd_queue is full (cmd=%d)\r\n", (int) packet.param);
             break;
+        case error_type_t::WAV_OPEN_FAIL:
+            _log_printf("ERROR: wav file open failed\r\n");
+            break;
+        case error_type_t::WAV_DATA_WRITE_FAIL:
+            _log_printf("ERROR: wav data write failed\r\n");
+            break;
+        case error_type_t::WAV_DATA_SYNC_FAIL:
+            _log_printf("ERROR: wav data sync failed\r\n");
+            break;
+        case error_type_t::WAV_CLOSE_FAIL:
+            _log_printf("ERROR: wav file close failed\r\n");
+            break;
+        case error_type_t::SUFFIX_FILE_FAIL:
+            _log_printf("ERROR: suffix file failed\r\n");
+            break;
         default:
             _log_printf("ERROR: unknown error\r\n");
             break;
@@ -517,7 +532,8 @@ void spdif_rec_wav::_log_printf(const char* fmt, ...)
 
         return;
     }
-    // error
+
+    printf("ERROR: printing on log file failed\r\n");
 }
 
 int spdif_rec_wav::_get_last_suffix()
@@ -559,7 +575,8 @@ void spdif_rec_wav::_set_last_suffix(int suffix)
         if (fr != FR_OK) break;
         return;
     }
-    // error
+
+    _report_error(error_type_t::SUFFIX_FILE_FAIL);
 }
 
 spdif_rec_wav::blank_status_t spdif_rec_wav::_scan_blank(const uint32_t* buff, const uint32_t sub_frame_count, const uint32_t sample_freq)
@@ -655,11 +672,15 @@ spdif_rec_wav::spdif_rec_wav(const std::string filename, const uint32_t sample_f
         blocking_wait_core0_grant();
         fr = f_write(&_fil, buf, sizeof(buf), &bw);
         if (fr != FR_OK || bw != sizeof(buf)) break;
+        blocking_wait_core0_grant();
+        fr = f_sync(&_fil);
+        if (fr != FR_OK) break;
 
         drain_core0_grant();
         return;
     }
-    // error
+
+    _report_error(error_type_t::WAV_OPEN_FAIL);
 }
 
 /*-----------------/
@@ -693,6 +714,9 @@ spdif_rec_wav::~spdif_rec_wav()
             blocking_wait_core0_grant();
             fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
             if (fr != FR_OK || bw != sizeof(uint32_t)) break;
+            blocking_wait_core0_grant();
+            fr = f_sync(&_fil);
+            if (fr != FR_OK) break;
 
             // Subchunk2Size
             blocking_wait_core0_grant();
@@ -702,6 +726,9 @@ spdif_rec_wav::~spdif_rec_wav()
             blocking_wait_core0_grant();
             fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
             if (fr != FR_OK || bw != sizeof(uint32_t)) break;
+            blocking_wait_core0_grant();
+            fr = f_sync(&_fil);
+            if (fr != FR_OK) break;
 
             blocking_wait_core0_grant();
             fr = _gradual_seek(cur_pos);
@@ -714,7 +741,8 @@ spdif_rec_wav::~spdif_rec_wav()
         drain_core0_grant();
         return;
     }
-    // error
+
+    _report_error(error_type_t::WAV_OPEN_FAIL);
 }
 
 /*--------------------------/
@@ -763,7 +791,16 @@ uint32_t spdif_rec_wav::_write_core(const uint32_t* buff, const uint32_t sub_fra
             _wav_buf[i/2] |= ((buff[i] >> 12) & 0xffff) << 16;
         }
         fr = f_write(&_fil, static_cast<const void *>(_wav_buf), sub_frame_count*2, &bw);
-        if (fr != FR_OK || bw != sub_frame_count*2) printf("error 4\r\n");
+        if (fr != FR_OK || bw != sub_frame_count*2) {
+            _report_error(error_type_t::WAV_DATA_WRITE_FAIL);
+        }
+        // comment below to let FATFS to do f_sync() timing for better performance
+        /*
+        fr = f_sync(&_fil);
+        if (fr != FR_OK) {
+            _report_error(error_type_t::WAV_DATA_SYNC_FAIL);
+        }
+        */
     } else if (_bits_per_sample == bits_per_sample_t::_24BITS) {
         for (int i = 0, j = 0; i < sub_frame_count; i += 4, j += 3) {
             _wav_buf[j+0] = (((buff[i+1] >> 4) & 0x0000ff) << 24) | (((buff[i+0] >> 4) & 0xffffff) >>  0);
@@ -771,7 +808,16 @@ uint32_t spdif_rec_wav::_write_core(const uint32_t* buff, const uint32_t sub_fra
             _wav_buf[j+2] = (((buff[i+3] >> 4) & 0xffffff) <<  8) | (((buff[i+2] >> 4) & 0xff0000) >> 16);
         }
         fr = f_write(&_fil, static_cast<const void *>(_wav_buf), sub_frame_count*3, &bw);
-        if (fr != FR_OK || bw != sub_frame_count*3) printf("error 4\r\n");
+        if (fr != FR_OK || bw != sub_frame_count*3) {
+            _report_error(error_type_t::WAV_DATA_WRITE_FAIL);
+        }
+        // comment below to let FATFS to do f_sync() timing for better performance
+        /*
+        fr = f_sync(&_fil);
+        if (fr != FR_OK) {
+            _report_error(error_type_t::WAV_DATA_SYNC_FAIL);
+        }
+        */
     }
 
     return static_cast<uint32_t>(bw);

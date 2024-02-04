@@ -46,11 +46,12 @@ queue_t        spdif_rec_wav::_spdif_queue;
 queue_t        spdif_rec_wav::_file_cmd_queue;
 queue_t        spdif_rec_wav::_file_cmd_reply_queue;
 queue_t        spdif_rec_wav::_record_cmd_queue;
+queue_t        spdif_rec_wav::_error_queue;
 
 /*------------------------/
 /  Public class functions
 /------------------------*/
-void spdif_rec_wav::file_cmd_process()
+void spdif_rec_wav::process_file_cmd()
 {
     while (!queue_is_empty(&_file_cmd_queue)) {
         file_cmd_data_t cmd_data;
@@ -115,6 +116,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
     queue_init(&_file_cmd_queue, sizeof(file_cmd_data_t), FILE_CMD_QUEUE_LENGTH);
     queue_init(&_file_cmd_reply_queue, sizeof(file_cmd_data_t), FILE_CMD_QUEUE_LENGTH);
     queue_init(&_record_cmd_queue, sizeof(record_cmd_data_t), RECORD_CMD_QUEUE_LENGTH);
+    queue_init(&_error_queue, sizeof(_error_packet_t), ERROR_QUEUE_LENGTH);
 
     printf("spdif_rec_wav process started\r\n");
 
@@ -164,7 +166,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 _req_prepare_file(next, _suffix, sample_freq, bits_per_sample);
             }
             while (next.status != inst_status_t::PREPARED) {
-                _file_reply_cmd_process();
+                _process_file_reply_cmd();
             }
             cur = next;
             next.reset();
@@ -218,7 +220,8 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                     }
                 }
 
-                _file_reply_cmd_process();
+                _process_file_reply_cmd();
+                _process_error();
 
                 if (!queue_is_empty(&_record_cmd_queue)) {
                     queue_remove_blocking(&_record_cmd_queue, &record_cmd_data);
@@ -227,7 +230,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
             }
 
             while (prev.status != inst_status_t::FINALIZED) {
-                _file_reply_cmd_process();
+                _process_file_reply_cmd();
             }
             prev = cur;
             _req_finalize_file(prev);
@@ -235,11 +238,11 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
             if (record_cmd_data.cmd == record_cmd_type_t::END_CMD) {
                 _recording_flag = false;
                 while (prev.status != inst_status_t::FINALIZED) {
-                    _file_reply_cmd_process();
+                    _process_file_reply_cmd();
                 }
                 _req_finalize_file(next, false);
                 while (next.status != inst_status_t::FINALIZED) {
-                    _file_reply_cmd_process();
+                    _process_file_reply_cmd();
                 }
                 next.reset();
 
@@ -255,6 +258,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
             _suffix++;
         }
     }
+    _process_error();
 }
 
 void spdif_rec_wav::start_recording(const bits_per_sample_t bits_per_sample, const bool standby)
@@ -325,17 +329,30 @@ void spdif_rec_wav::clear_suffix()
 /*--------------------------/
 /  Protected class functions
 /--------------------------*/
-void spdif_rec_wav::_file_reply_cmd_process()
+void spdif_rec_wav::_process_file_reply_cmd()
 {
     while (!queue_is_empty(&_file_cmd_reply_queue)) {
         file_cmd_data_t cmd_data;
-        inst_with_status_t* inst_w_sts;
         queue_remove_blocking(&_file_cmd_reply_queue, &cmd_data);
-        inst_w_sts = reinterpret_cast<inst_with_status_t*>(cmd_data.param[0]);
+        inst_with_status_t* inst_w_sts = reinterpret_cast<inst_with_status_t*>(cmd_data.param[0]);
         if (cmd_data.cmd == file_cmd_type_t::PREPARE) {
             inst_w_sts->status = inst_status_t::PREPARED;
         } else if (cmd_data.cmd == file_cmd_type_t::FINALIZE) {
             inst_w_sts->status = inst_status_t::FINALIZED;
+        }
+    }
+}
+
+void spdif_rec_wav::_process_error()
+{
+    while (!queue_is_empty(&_error_queue)) {
+        error_packet_t packet;
+        queue_remove_blocking(&_error_queue, &packet);
+        if (packet.type == error_type_t::ILLEGAL_SUB_FRAME_COUNT) {
+            _log_printf("ERROR: illegal sub_frame_count\r\n");
+        } else if (packet.type == error_type_t::SPDIF_QUEUE_FULL) {
+            int error_count = static_cast<int>(packet.param);
+            _log_printf("ERROR: _spdif_queue is full x%d\r\n", error_count);
         }
     }
 }
@@ -364,12 +381,25 @@ void spdif_rec_wav::_req_finalize_file(inst_with_status_t& inst_w_sts, const boo
     inst_w_sts.status = inst_status_t::REQ_FINALIZE;
 }
 
+void spdif_rec_wav::_report_error(const error_type_t type, const uint32_t param)
+{
+    error_packet_t packet;
+    packet.type = type;
+    packet.param = param;
+    queue_try_add(&_error_queue, &packet);
+}
+
 void spdif_rec_wav::_push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count)
 {
+    // note that reporting errors through _error_queue is mandatory
+    //   because _log_printf includes file access and mutex from IRQ routine like this function locks whole system.
+
+    static int error_count = 0;
+
     if (!_standby_flag && !_recording_flag) return;
 
     if (sub_frame_count != SPDIF_BLOCK_SIZE) {
-        printf("ERROR: illegal sub_frame_count\r\n");
+        _report_error(error_type_t::ILLEGAL_SUB_FRAME_COUNT);
         return;
     }
 
@@ -377,8 +407,16 @@ void spdif_rec_wav::_push_sub_frame_buf(const uint32_t* buff, const uint32_t sub
     sub_frame_buf_info_t buf_info = {_sub_frame_buf_id, sub_frame_count};
     if (queue_try_add(&_spdif_queue, &buf_info)) {
         _sub_frame_buf_id = (_sub_frame_buf_id + 1) % NUM_SUB_FRAME_BUF;
+        if (error_count > 0) {
+            _report_error(error_type_t::SPDIF_QUEUE_FULL, error_count);
+        }
+        error_count = 0;
     } else {
-        printf("ERROR: _spdif_queue is full\r\n");
+        error_count++;
+        if (error_count >= 100) {
+            _report_error(error_type_t::SPDIF_QUEUE_FULL, error_count);
+            error_count -= 100;
+        }
     }
 }
 

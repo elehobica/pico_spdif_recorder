@@ -840,6 +840,12 @@ uint32_t spdif_rec_wav::_write(const uint32_t* buff, const uint32_t sub_frame_co
     _total_bytes += bytes;
     _total_time_us += t_us;
 
+    // force immidiate split to avoid 32bit file size overflow
+    if (_total_bytes > MAX_TOTAL_BYTES) {
+        split_recording(_bits_per_sample);
+        _log_printf("force immediate wav split due to file size\r\n");
+    }
+
     return bytes;
 }
 

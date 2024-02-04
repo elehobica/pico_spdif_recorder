@@ -116,6 +116,7 @@ protected:
     static constexpr float BLANK_SKIP_SEC = 10.0;  // skip recording if blank time is longer than this seconds
     static constexpr const char* WAV_PREFIX = "record_";
     static constexpr uint32_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB
+    static constexpr uint32_t MAX_TOTAL_BYTES = 0xffff0000;  // max total bytes of wav data to avoid 32bit overflow
     static const char* _suffix_info_filename;
     static int _suffix;
     static char _log_filename[16];

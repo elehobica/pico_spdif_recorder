@@ -697,6 +697,7 @@ spdif_rec_wav::~spdif_rec_wav()
             blocking_wait_core0_grant();
             fr = f_close(&_fil);
             if (fr != FR_OK) break;
+
             blocking_wait_core0_grant();
             fr = f_unlink(_filename.c_str());
             if (fr != FR_OK) break;
@@ -705,6 +706,10 @@ spdif_rec_wav::~spdif_rec_wav()
             uint32_t u32;
             blocking_wait_core0_grant();
             DWORD cur_pos = f_tell(&_fil);
+
+            blocking_wait_core0_grant();
+            fr = f_sync(&_fil);
+            if (fr != FR_OK) break;
 
             // ChunkSize
             blocking_wait_core0_grant();

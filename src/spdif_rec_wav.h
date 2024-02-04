@@ -110,6 +110,7 @@ protected:
     static constexpr float BLANK_REPEAT_PROHIBIT_SEC = 10.0;  // the seconds within which detecting blank is prohibited
     static constexpr float BLANK_SKIP_SEC = 10.0;  // skip recording if blank time is longer than this seconds
     static constexpr const char* WAV_PREFIX = "record_";
+    static constexpr uint32_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB
     static const char* _suffix_info_filename;
     static int _suffix;
     static char _log_filename[16];
@@ -145,6 +146,7 @@ protected:
     float                   _worst_bandwidth;
     uint                    _queue_worst;
 
+    // process on core1
     static void _process_file_reply_cmd();
     static void _process_error();
     static void _req_prepare_file(inst_with_status_t& inst_w_sts, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
@@ -156,6 +158,11 @@ protected:
     static int _get_last_suffix();
     static void _set_last_suffix(int suffix);
     static blank_status_t _scan_blank(const uint32_t* buff, const uint32_t sub_frame_count, const uint32_t sample_freq);
+
+    // process on core0
+    FRESULT _gradual_seek(DWORD target_pos);
+
+    // process on core1
     void _reset_blank_scan_sec();
     uint32_t _write_core(const uint32_t* buff, const uint32_t sub_frame_count);
     uint32_t _write(const uint32_t* buff, const uint32_t sub_frame_count);

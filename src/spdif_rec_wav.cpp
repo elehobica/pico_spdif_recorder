@@ -682,10 +682,12 @@ spdif_rec_wav::~spdif_rec_wav()
         } else {
             UINT bw;
             uint32_t u32;
+            blocking_wait_core0_grant();
+            DWORD cur_pos = f_tell(&_fil);
 
             // ChunkSize
             blocking_wait_core0_grant();
-            fr = f_lseek(&_fil, 4);
+            fr = _gradual_seek(4);
             if (fr != FR_OK) break;
             u32 = _total_bytes + (WAV_HEADER_SIZE - 8);
             blocking_wait_core0_grant();
@@ -694,13 +696,16 @@ spdif_rec_wav::~spdif_rec_wav()
 
             // Subchunk2Size
             blocking_wait_core0_grant();
-            fr = f_lseek(&_fil, 40);
+            fr = _gradual_seek(40);
             if (fr != FR_OK) break;
             u32 = _total_bytes;
             blocking_wait_core0_grant();
             fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
             if (fr != FR_OK || bw != sizeof(uint32_t)) break;
 
+            blocking_wait_core0_grant();
+            fr = _gradual_seek(cur_pos);
+            if (fr != FR_OK) break;
             blocking_wait_core0_grant();
             fr = f_close(&_fil);
             if (fr != FR_OK) break;
@@ -719,6 +724,34 @@ spdif_rec_wav::~spdif_rec_wav()
 /*-----------------------------/
 /  Protected Member functions
 /-----------------------------*/
+FRESULT spdif_rec_wav::_gradual_seek(DWORD target_pos)
+{
+    FRESULT fr;     /* FatFs return code */
+
+    DWORD cur_pos = f_tell(&_fil);
+    int64_t diff = (int64_t) target_pos - cur_pos;
+
+    while (cur_pos != target_pos) {
+        if (diff >= 0) {
+            if (cur_pos + SEEK_STEP_BYTES < target_pos) {
+                cur_pos += SEEK_STEP_BYTES;
+            } else {
+                cur_pos = target_pos;
+            }
+        } else {
+            if (cur_pos > target_pos + SEEK_STEP_BYTES) {
+                cur_pos -= SEEK_STEP_BYTES;
+            } else {
+                cur_pos = target_pos;
+            }
+        }
+        blocking_wait_core0_grant();
+        fr = f_lseek(&_fil, cur_pos);
+        if (fr != FR_OK) break;
+    }
+    return fr;
+}
+
 uint32_t spdif_rec_wav::_write_core(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     FRESULT fr;     /* FatFs return code */
@@ -778,7 +811,7 @@ void spdif_rec_wav::_report_final()
 {
     uint32_t total_sec = _total_bytes / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS / _sample_freq;
     uint32_t total_sec_dp = static_cast<uint64_t>(_total_bytes) / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS * 1000 / _sample_freq - total_sec*1000;
-    _log_printf("recording done \"%s\" %d bytes (time:  %d:%02d.%03d)\r\n", _filename.c_str(), _total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
+    _log_printf("recording done \"%s\" %lu bytes (time:  %d:%02d.%03d)\r\n", _filename.c_str(), _total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
     if (_verbose) {
         float avg_bw = (float) _total_bytes / _total_time_us * 1e3;
         printf("SD Card writing bandwidth\r\n");

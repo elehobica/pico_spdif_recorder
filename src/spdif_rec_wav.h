@@ -26,6 +26,8 @@ public:
 
     // process on core0
     static void process_file_cmd();
+    static void blocking_wait_core0_grant();
+    static void drain_core0_grant();
     // process on core1
     static void record_process_loop(const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
     static void start_recording(const bits_per_sample_t bits_per_sample, const bool standby = false);
@@ -101,6 +103,7 @@ protected:
     static constexpr int FILE_CMD_QUEUE_LENGTH = 2;
     static constexpr int RECORD_CMD_QUEUE_LENGTH = 2;
     static constexpr int ERROR_QUEUE_LENGTH = 10;
+    static constexpr int CORE0_GRANT_QUEUE_LENGTH = 1;
     static constexpr int WAV_HEADER_SIZE = 44;
     static constexpr int BLANK_LEVEL = 16;  // level to detect blank supposing 16bit data
     static constexpr float BLANK_SEC = 0.5;  // the seconds to detect the blank
@@ -125,7 +128,9 @@ protected:
     static queue_t _file_cmd_reply_queue;
     static queue_t _record_cmd_queue;
     static queue_t _error_queue;
+    static queue_t _core0_grant_queue;
 
+    // constructor and destructor assume to be processed on core0
     spdif_rec_wav(const std::string filename, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     virtual ~spdif_rec_wav();
 
@@ -145,6 +150,7 @@ protected:
     static void _req_prepare_file(inst_with_status_t& inst_w_sts, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     static void _req_finalize_file(inst_with_status_t& inst_w_sts, const bool report_final = true);
     static void _report_error(const error_type_t type, const uint32_t param = 0L);
+    static void _send_core0_grant();
     static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
     static void _log_printf(const char* fmt, ...);
     static int _get_last_suffix();

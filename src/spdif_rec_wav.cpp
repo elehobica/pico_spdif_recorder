@@ -47,6 +47,7 @@ queue_t        spdif_rec_wav::_file_cmd_queue;
 queue_t        spdif_rec_wav::_file_cmd_reply_queue;
 queue_t        spdif_rec_wav::_record_cmd_queue;
 queue_t        spdif_rec_wav::_error_queue;
+queue_t        spdif_rec_wav::_core0_grant_queue;
 
 /*------------------------/
 /  Public class functions
@@ -86,6 +87,20 @@ void spdif_rec_wav::process_file_cmd()
     }
 }
 
+void spdif_rec_wav::blocking_wait_core0_grant()
+{
+    while (queue_is_empty(&_core0_grant_queue)) {}
+    drain_core0_grant();
+}
+
+void spdif_rec_wav::drain_core0_grant()
+{
+    while (!queue_is_empty(&_core0_grant_queue)) {
+        bool flag;
+        queue_remove_blocking(&_core0_grant_queue, &flag);
+    }
+}
+
 void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suffix_info_filename)
 {
     // Initialize class variables
@@ -121,6 +136,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
     queue_init(&_file_cmd_reply_queue, sizeof(file_cmd_data_t), FILE_CMD_QUEUE_LENGTH);
     queue_init(&_record_cmd_queue, sizeof(record_cmd_data_t), RECORD_CMD_QUEUE_LENGTH);
     queue_init(&_error_queue, sizeof(_error_packet_t), ERROR_QUEUE_LENGTH);
+    queue_init(&_core0_grant_queue, sizeof(bool), CORE0_GRANT_QUEUE_LENGTH);
 
     printf("spdif_rec_wav process started\r\n");
 
@@ -170,6 +186,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 _req_prepare_file(next, _suffix, sample_freq, bits_per_sample);
             }
             while (next.status != inst_status_t::PREPARED) {
+                _send_core0_grant();
                 _process_file_reply_cmd();
             }
             cur = next;
@@ -222,6 +239,8 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                         queue_level = queue_get_level(&_spdif_queue);
                         cur.inst->_record_queue_level(queue_level);
                     }
+                } else {
+                    _send_core0_grant();
                 }
 
                 _process_file_reply_cmd();
@@ -234,6 +253,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
             }
 
             while (prev.status != inst_status_t::FINALIZED) {
+                _send_core0_grant();
                 _process_file_reply_cmd();
             }
             prev = cur;
@@ -242,10 +262,12 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
             if (record_cmd_data.cmd == record_cmd_type_t::END_CMD) {
                 _recording_flag = false;
                 while (prev.status != inst_status_t::FINALIZED) {
+                    _send_core0_grant();
                     _process_file_reply_cmd();
                 }
                 _req_finalize_file(next, false);
                 while (next.status != inst_status_t::FINALIZED) {
+                    _send_core0_grant();
                     _process_file_reply_cmd();
                 }
                 next.reset();
@@ -421,6 +443,12 @@ void spdif_rec_wav::_report_error(const error_type_t type, const uint32_t param)
     }
 }
 
+void spdif_rec_wav::_send_core0_grant()
+{
+    bool flag = true;
+    queue_try_add(&_core0_grant_queue, &flag);
+}
+
 void spdif_rec_wav::_push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     // note that reporting errors through _error_queue is mandatory
@@ -445,9 +473,9 @@ void spdif_rec_wav::_push_sub_frame_buf(const uint32_t* buff, const uint32_t sub
         error_count = 0;
     } else {
         error_count++;
-        if (error_count >= 100) {
+        if (error_count >= 1000) {
             _report_error(error_type_t::SPDIF_QUEUE_FULL, error_count);
-            error_count -= 100;
+            error_count -= 1000;
         }
     }
 }
@@ -576,6 +604,7 @@ spdif_rec_wav::spdif_rec_wav(const std::string filename, const uint32_t sample_f
     _worst_bandwidth(INFINITY),
     _queue_worst(0)
 {
+    drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
         UINT bw;
@@ -583,8 +612,10 @@ spdif_rec_wav::spdif_rec_wav(const std::string filename, const uint32_t sample_f
         uint16_t u16;
         uint32_t u32;
 
+        blocking_wait_core0_grant();
         fr = f_open(&_fil, _filename.c_str(), FA_WRITE | FA_CREATE_ALWAYS);
 
+        blocking_wait_core0_grant();
         // ChunkID
         memcpy(&buf[0], "RIFF", 4);
         // ChunkSize (temporary 0)
@@ -621,9 +652,11 @@ spdif_rec_wav::spdif_rec_wav(const std::string filename, const uint32_t sample_f
         // Subchunk2Size (temporary 0)
         memset(&buf[40], 0, 4);
 
+        blocking_wait_core0_grant();
         fr = f_write(&_fil, buf, sizeof(buf), &bw);
         if (fr != FR_OK || bw != sizeof(buf)) break;
 
+        drain_core0_grant();
         return;
     }
     // error
@@ -634,13 +667,16 @@ spdif_rec_wav::spdif_rec_wav(const std::string filename, const uint32_t sample_f
 /-----------------*/
 spdif_rec_wav::~spdif_rec_wav()
 {
+    drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
 
         if (_total_bytes == 0) {
             // remove file if no samples
+            blocking_wait_core0_grant();
             fr = f_close(&_fil);
             if (fr != FR_OK) break;
+            blocking_wait_core0_grant();
             fr = f_unlink(_filename.c_str());
             if (fr != FR_OK) break;
         } else {
@@ -648,22 +684,30 @@ spdif_rec_wav::~spdif_rec_wav()
             uint32_t u32;
 
             // ChunkSize
+            blocking_wait_core0_grant();
             fr = f_lseek(&_fil, 4);
             if (fr != FR_OK) break;
             u32 = _total_bytes + (WAV_HEADER_SIZE - 8);
+            blocking_wait_core0_grant();
             fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
             if (fr != FR_OK || bw != sizeof(uint32_t)) break;
 
             // Subchunk2Size
+            blocking_wait_core0_grant();
             fr = f_lseek(&_fil, 40);
             if (fr != FR_OK) break;
             u32 = _total_bytes;
+            blocking_wait_core0_grant();
             fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
             if (fr != FR_OK || bw != sizeof(uint32_t)) break;
 
+            blocking_wait_core0_grant();
             fr = f_close(&_fil);
             if (fr != FR_OK) break;
         }
+
+        drain_core0_grant();
+        return;
     }
     // error
 }

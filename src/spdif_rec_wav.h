@@ -81,7 +81,10 @@ protected:
     } record_cmd_data_t;
     enum class error_type_t {
         SPDIF_QUEUE_FULL = 0,
-        ILLEGAL_SUB_FRAME_COUNT
+        ILLEGAL_SUB_FRAME_COUNT,
+        FILE_CMD_QUEUE_FULL,
+        FILE_CMD_REPLY_QUEUE_FULL,
+        RECORD_CMD_QUEUE_FULL
     };
     typedef struct _error_packet_t {
         error_type_t type;

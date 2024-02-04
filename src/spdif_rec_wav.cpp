@@ -68,7 +68,9 @@ void spdif_rec_wav::process_file_cmd()
             cmd_data.param[1] = 0L;
             cmd_data.param[2] = 0L;
             cmd_data.param[3] = 0L;
-            queue_try_add(&_file_cmd_reply_queue, &cmd_data);
+            if (!queue_try_add(&_file_cmd_reply_queue, &cmd_data)) {
+                _report_error(error_type_t::FILE_CMD_REPLY_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
+            }
         } else if (cmd_data.cmd == file_cmd_type_t::FINALIZE) {
             bool report_flag = static_cast<bool>(cmd_data.param[1]);
             if (report_flag) inst_w_sts->inst->_report_final();
@@ -77,7 +79,9 @@ void spdif_rec_wav::process_file_cmd()
             cmd_data.param[1] = 0L;
             cmd_data.param[2] = 0L;
             cmd_data.param[3] = 0L;
-            queue_try_add(&_file_cmd_reply_queue, &cmd_data);
+            if (!queue_try_add(&_file_cmd_reply_queue, &cmd_data)) {
+                _report_error(error_type_t::FILE_CMD_REPLY_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
+            }
         }
     }
 }
@@ -267,7 +271,9 @@ void spdif_rec_wav::start_recording(const bits_per_sample_t bits_per_sample, con
     cmd_data.cmd = standby ? record_cmd_type_t::STANDBY_START_CMD : record_cmd_type_t::START_CMD;
     cmd_data.param[0] = static_cast<uint32_t>(spdif_rx_get_samp_freq());
     cmd_data.param[1] = static_cast<uint32_t>(bits_per_sample);
-    queue_try_add(&_record_cmd_queue, &cmd_data);
+    if (!queue_try_add(&_record_cmd_queue, &cmd_data)) {
+        _report_error(error_type_t::RECORD_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
+    }
 }
 
 void spdif_rec_wav::end_recording(const bool split)
@@ -276,7 +282,9 @@ void spdif_rec_wav::end_recording(const bool split)
     cmd_data.cmd = split ? record_cmd_type_t::END_FOR_SPLIT_CMD : record_cmd_type_t::END_CMD;
     cmd_data.param[0] = 0L;
     cmd_data.param[1] = 0L;
-    queue_try_add(&_record_cmd_queue, &cmd_data);
+    if (!queue_try_add(&_record_cmd_queue, &cmd_data)) {
+        _report_error(error_type_t::RECORD_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
+    }
 }
 
 void spdif_rec_wav::split_recording(const bits_per_sample_t bits_per_sample)
@@ -348,11 +356,27 @@ void spdif_rec_wav::_process_error()
     while (!queue_is_empty(&_error_queue)) {
         error_packet_t packet;
         queue_remove_blocking(&_error_queue, &packet);
-        if (packet.type == error_type_t::ILLEGAL_SUB_FRAME_COUNT) {
+        switch (packet.type) {
+        case error_type_t::ILLEGAL_SUB_FRAME_COUNT:
             _log_printf("ERROR: illegal sub_frame_count\r\n");
-        } else if (packet.type == error_type_t::SPDIF_QUEUE_FULL) {
+            break;
+        case error_type_t::SPDIF_QUEUE_FULL: {
             int error_count = static_cast<int>(packet.param);
             _log_printf("ERROR: _spdif_queue is full x%d\r\n", error_count);
+            break;
+        }
+        case error_type_t::FILE_CMD_QUEUE_FULL:
+            _log_printf("ERROR: _file_cmd_queue is full (cmd=%d)\r\n", (int) packet.param);
+            break;
+        case error_type_t::FILE_CMD_REPLY_QUEUE_FULL:
+            _log_printf("ERROR: _file_cmd_reply_queue is full (cmd=%d)\r\n", (int) packet.param);
+            break;
+        case error_type_t::RECORD_CMD_QUEUE_FULL:
+            _log_printf("ERROR: _record_cmd_queue is full (cmd=%d)\r\n", (int) packet.param);
+            break;
+        default:
+            _log_printf("ERROR: unknown error\r\n");
+            break;
         }
     }
 }
@@ -365,8 +389,11 @@ void spdif_rec_wav::_req_prepare_file(inst_with_status_t& inst_w_sts, const uint
     cmd_data.param[1] = suffix;
     cmd_data.param[2] = sample_freq;
     cmd_data.param[3] = static_cast<uint32_t>(bits_per_sample);
-    queue_try_add(&_file_cmd_queue, &cmd_data);
-    inst_w_sts.status = inst_status_t::REQ_PREPARE;
+    if (queue_try_add(&_file_cmd_queue, &cmd_data)) {
+        inst_w_sts.status = inst_status_t::REQ_PREPARE;
+    } else {
+        _report_error(error_type_t::FILE_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
+    }
 }
 
 void spdif_rec_wav::_req_finalize_file(inst_with_status_t& inst_w_sts, const bool report_flag)
@@ -377,8 +404,11 @@ void spdif_rec_wav::_req_finalize_file(inst_with_status_t& inst_w_sts, const boo
     cmd_data.param[1] = static_cast<uint32_t>(report_flag);
     cmd_data.param[2] = 0L;
     cmd_data.param[3] = 0L;
-    queue_try_add(&_file_cmd_queue, &cmd_data);
-    inst_w_sts.status = inst_status_t::REQ_FINALIZE;
+    if (queue_try_add(&_file_cmd_queue, &cmd_data)) {
+        inst_w_sts.status = inst_status_t::REQ_FINALIZE;
+    } else {
+        _report_error(error_type_t::FILE_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
+    }
 }
 
 void spdif_rec_wav::_report_error(const error_type_t type, const uint32_t param)
@@ -386,7 +416,9 @@ void spdif_rec_wav::_report_error(const error_type_t type, const uint32_t param)
     error_packet_t packet;
     packet.type = type;
     packet.param = param;
-    queue_try_add(&_error_queue, &packet);
+    if (!queue_try_add(&_error_queue, &packet)) {
+        printf("ERROR: _error_queue is full\r\n");
+    }
 }
 
 void spdif_rec_wav::_push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count)

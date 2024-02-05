@@ -89,8 +89,8 @@ void spdif_rec_wav::process_file_cmd()
 
 void spdif_rec_wav::blocking_wait_core0_grant()
 {
-    while (queue_is_empty(&_core0_grant_queue)) {}
     drain_core0_grant();
+    while (queue_is_empty(&_core0_grant_queue)) {}
 }
 
 void spdif_rec_wav::drain_core0_grant()
@@ -191,8 +191,6 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
             }
             cur = next;
             next.reset();
-            // prepare next file
-            _req_prepare_file(next, _suffix + 1, sample_freq, bits_per_sample);
 
             _recording_flag = true;
             _standby_flag = false;
@@ -239,7 +237,11 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                         queue_level = queue_get_level(&_spdif_queue);
                         cur.inst->_record_queue_level(queue_level);
                     }
-                } else {
+                } else if (queue_level < NUM_SUB_FRAME_BUF/4) {
+                    if (cur.inst->_is_data_written() && next.status == inst_status_t::RESET) {
+                        // prepare next file
+                        _req_prepare_file(next, _suffix + 1, sample_freq, bits_per_sample);
+                    }
                     _send_core0_grant();
                 }
 
@@ -619,9 +621,9 @@ spdif_rec_wav::spdif_rec_wav(const std::string filename, const uint32_t sample_f
     _total_time_us(0),
     _best_bandwidth(-INFINITY),
     _worst_bandwidth(INFINITY),
-    _queue_worst(0)
+    _queue_worst(0),
+    _data_written(false)
 {
-    drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
         UINT bw;
@@ -799,13 +801,6 @@ uint32_t spdif_rec_wav::_write_core(const uint32_t* buff, const uint32_t sub_fra
         if (fr != FR_OK || bw != sub_frame_count*2) {
             _report_error(error_type_t::WAV_DATA_WRITE_FAIL);
         }
-        // comment below to let FATFS to do f_sync() timing for better performance
-        /*
-        fr = f_sync(&_fil);
-        if (fr != FR_OK) {
-            _report_error(error_type_t::WAV_DATA_SYNC_FAIL);
-        }
-        */
     } else if (_bits_per_sample == bits_per_sample_t::_24BITS) {
         for (int i = 0, j = 0; i < sub_frame_count; i += 4, j += 3) {
             _wav_buf[j+0] = (((buff[i+1] >> 4) & 0x0000ff) << 24) | (((buff[i+0] >> 4) & 0xffffff) >>  0);
@@ -816,13 +811,11 @@ uint32_t spdif_rec_wav::_write_core(const uint32_t* buff, const uint32_t sub_fra
         if (fr != FR_OK || bw != sub_frame_count*3) {
             _report_error(error_type_t::WAV_DATA_WRITE_FAIL);
         }
-        // comment below to let FATFS to do f_sync() timing for better performance
-        /*
-        fr = f_sync(&_fil);
-        if (fr != FR_OK) {
-            _report_error(error_type_t::WAV_DATA_SYNC_FAIL);
-        }
-        */
+    }
+
+    fr = f_sync(&_fil);
+    if (fr != FR_OK) {
+        _report_error(error_type_t::WAV_DATA_SYNC_FAIL);
     }
 
     return static_cast<uint32_t>(bw);
@@ -844,6 +837,7 @@ uint32_t spdif_rec_wav::_write(const uint32_t* buff, const uint32_t sub_frame_co
     _total_sample_count += sub_frame_count;
     _total_bytes += bytes;
     _total_time_us += t_us;
+    _data_written = true;
 
     // force immidiate split to avoid 32bit file size overflow
     if (_total_bytes > MAX_TOTAL_BYTES) {
@@ -879,4 +873,9 @@ void spdif_rec_wav::_report_final()
         printf(" wav:   %7.2f KB/s\r\n", (float) (static_cast<uint32_t>(_bits_per_sample)*_sample_freq*2/8) / 1e3);
         printf("spdif queue usage: %7.2f %%\r\n", (float) _queue_worst / SPDIF_QUEUE_LENGTH * 100);
     }
+}
+
+bool spdif_rec_wav::_is_data_written()
+{
+    return _data_written;
 }

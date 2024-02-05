@@ -116,7 +116,7 @@ protected:
     static constexpr float BLANK_SKIP_SEC = 10.0;  // skip recording if blank time is longer than this seconds
     static constexpr const char* WAV_PREFIX = "record_";
     static constexpr uint32_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB
-    static constexpr uint32_t MAX_TOTAL_BYTES = 0xffff0000;  // max total bytes of wav data to avoid 32bit overflow
+    static constexpr uint32_t MAX_TOTAL_BYTES = 0xfff00000;  // max total bytes of wav data to avoid 32bit overflow
     static const char* _suffix_info_filename;
     static int _suffix;
     static char _log_filename[16];
@@ -151,6 +151,7 @@ protected:
     float                   _best_bandwidth;
     float                   _worst_bandwidth;
     uint                    _queue_worst;
+    bool                    _data_written;
 
     // process on core1
     static void _process_file_reply_cmd();
@@ -175,6 +176,7 @@ protected:
     void _record_queue_level(uint queue_level);
     void _report_start();
     void _report_final();
+    bool _is_data_written();
 
     friend void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err);
 };

@@ -24,10 +24,10 @@ public:
         _24BITS = 24,
     };
 
+    // === Public class functions ===
     // process on core0
+    static void set_wait_grant_func(void (*func)());
     static void process_file_cmd();
-    static void blocking_wait_core0_grant();
-    static void drain_core0_grant();
     // process on core1
     static void record_process_loop(const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
     static void start_recording(const bits_per_sample_t bits_per_sample, const bool standby = false);
@@ -117,6 +117,7 @@ protected:
     static constexpr const char* WAV_PREFIX = "record_";
     static constexpr uint32_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB
     static constexpr uint32_t MAX_TOTAL_BYTES = 0xfff00000;  // max total bytes of wav data to avoid 32bit overflow
+    static void (*_wait_grant_func)();
     static const char* _suffix_info_filename;
     static int _suffix;
     static char _log_filename[16];
@@ -153,6 +154,10 @@ protected:
     uint                    _queue_worst;
     bool                    _data_written;
 
+    // === Private class functions ===
+    // process on core0
+    static void _blocking_wait_core0_grant();
+    static void _drain_core0_grant();
     // process on core1
     static void _process_file_reply_cmd();
     static void _process_error();
@@ -166,9 +171,9 @@ protected:
     static void _set_last_suffix(int suffix);
     static blank_status_t _scan_blank(const uint32_t* buff, const uint32_t sub_frame_count, const uint32_t sample_freq);
 
+    // === Private member functions ===
     // process on core0
     FRESULT _gradual_seek(DWORD target_pos);
-
     // process on core1
     void _reset_blank_scan_sec();
     uint32_t _write_core(const uint32_t* buff, const uint32_t sub_frame_count);

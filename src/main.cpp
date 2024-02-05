@@ -99,6 +99,12 @@ void show_help(spdif_rec_wav::bits_per_sample_t bits_per_sample)
     printf("---------------------------\r\n");
 }
 
+void wait_led_blink()
+{
+    gpio_put(PIN_LED, (_millis() / 100) % 2 == 0);
+    sleep_ms(10);
+}
+
 int main()
 {
     int count = 0;
@@ -131,6 +137,7 @@ int main()
     sleep_ms(500);  // wait for USB serial terminal to be responded
     printf("\r\n");
 
+    spdif_rec_wav::set_wait_grant_func(wait_led_blink);
     // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
     multicore_launch_core1(spdif_rec_wav_record_process_loop);

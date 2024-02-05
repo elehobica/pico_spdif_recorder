@@ -4,13 +4,15 @@
 / refer to https://opensource.org/licenses/BSD-2-Clause
 /------------------------------------------------------*/
 
+#include "spdif_rec_wav.h"
+
 #include <iostream>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <cstdarg>
 #include <cmath>
-#include "spdif_rec_wav.h"
+
 #include "fatfs/ff.h"
 
 static inline uint64_t _micros(void)
@@ -29,6 +31,8 @@ void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_
 /*-----------------/
 /  Class variables
 /-----------------*/
+
+void           (*spdif_rec_wav::_wait_grant_func)();
 const char*    spdif_rec_wav::_suffix_info_filename;
 int            spdif_rec_wav::_suffix;
 char           spdif_rec_wav::_log_filename[16];
@@ -52,6 +56,11 @@ queue_t        spdif_rec_wav::_core0_grant_queue;
 /*------------------------/
 /  Public class functions
 /------------------------*/
+void spdif_rec_wav::set_wait_grant_func(void (*func)())
+{
+    _wait_grant_func = func;
+}
+
 void spdif_rec_wav::process_file_cmd()
 {
     while (!queue_is_empty(&_file_cmd_queue)) {
@@ -84,20 +93,6 @@ void spdif_rec_wav::process_file_cmd()
                 _report_error(error_type_t::FILE_CMD_REPLY_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
             }
         }
-    }
-}
-
-void spdif_rec_wav::blocking_wait_core0_grant()
-{
-    drain_core0_grant();
-    while (queue_is_empty(&_core0_grant_queue)) {}
-}
-
-void spdif_rec_wav::drain_core0_grant()
-{
-    while (!queue_is_empty(&_core0_grant_queue)) {
-        bool flag;
-        queue_remove_blocking(&_core0_grant_queue, &flag);
     }
 }
 
@@ -274,7 +269,6 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 }
                 next.reset();
 
-                sleep_ms(1);  // wait for buffer push to stop
                 // drain remained spdif queue to delete samples which should not be included in next wav
                 while (!queue_is_empty(&_spdif_queue)) {
                     sub_frame_buf_info_t buf_info;
@@ -361,6 +355,22 @@ void spdif_rec_wav::clear_suffix()
 /*--------------------------/
 /  Protected class functions
 /--------------------------*/
+void spdif_rec_wav::_blocking_wait_core0_grant()
+{
+    _drain_core0_grant();
+    while (queue_is_empty(&_core0_grant_queue)) {
+        (*_wait_grant_func)();
+    }
+}
+
+void spdif_rec_wav::_drain_core0_grant()
+{
+    while (!queue_is_empty(&_core0_grant_queue)) {
+        bool flag;
+        queue_remove_blocking(&_core0_grant_queue, &flag);
+    }
+}
+
 void spdif_rec_wav::_process_file_reply_cmd()
 {
     while (!queue_is_empty(&_file_cmd_reply_queue)) {
@@ -631,10 +641,10 @@ spdif_rec_wav::spdif_rec_wav(const std::string filename, const uint32_t sample_f
         uint16_t u16;
         uint32_t u32;
 
-        blocking_wait_core0_grant();
+        _blocking_wait_core0_grant();
         fr = f_open(&_fil, _filename.c_str(), FA_WRITE | FA_CREATE_ALWAYS);
 
-        blocking_wait_core0_grant();
+        _blocking_wait_core0_grant();
         // ChunkID
         memcpy(&buf[0], "RIFF", 4);
         // ChunkSize (temporary 0)
@@ -671,14 +681,14 @@ spdif_rec_wav::spdif_rec_wav(const std::string filename, const uint32_t sample_f
         // Subchunk2Size (temporary 0)
         memset(&buf[40], 0, 4);
 
-        blocking_wait_core0_grant();
+        _blocking_wait_core0_grant();
         fr = f_write(&_fil, buf, sizeof(buf), &bw);
         if (fr != FR_OK || bw != sizeof(buf)) break;
-        blocking_wait_core0_grant();
+        _blocking_wait_core0_grant();
         fr = f_sync(&_fil);
         if (fr != FR_OK) break;
 
-        drain_core0_grant();
+        _drain_core0_grant();
         return;
     }
 
@@ -690,62 +700,62 @@ spdif_rec_wav::spdif_rec_wav(const std::string filename, const uint32_t sample_f
 /-----------------*/
 spdif_rec_wav::~spdif_rec_wav()
 {
-    drain_core0_grant();
+    _drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
 
         if (_total_bytes == 0) {
             // remove file if no samples
-            blocking_wait_core0_grant();
+            _blocking_wait_core0_grant();
             fr = f_close(&_fil);
             if (fr != FR_OK) break;
 
-            blocking_wait_core0_grant();
+            _blocking_wait_core0_grant();
             fr = f_unlink(_filename.c_str());
             if (fr != FR_OK) break;
         } else {
             UINT bw;
             uint32_t u32;
-            blocking_wait_core0_grant();
+            _blocking_wait_core0_grant();
             DWORD cur_pos = f_tell(&_fil);
 
-            blocking_wait_core0_grant();
+            _blocking_wait_core0_grant();
             fr = f_sync(&_fil);
             if (fr != FR_OK) break;
 
             // ChunkSize
-            blocking_wait_core0_grant();
+            _blocking_wait_core0_grant();
             fr = _gradual_seek(4);
             if (fr != FR_OK) break;
             u32 = _total_bytes + (WAV_HEADER_SIZE - 8);
-            blocking_wait_core0_grant();
+            _blocking_wait_core0_grant();
             fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
             if (fr != FR_OK || bw != sizeof(uint32_t)) break;
-            blocking_wait_core0_grant();
+            _blocking_wait_core0_grant();
             fr = f_sync(&_fil);
             if (fr != FR_OK) break;
 
             // Subchunk2Size
-            blocking_wait_core0_grant();
+            _blocking_wait_core0_grant();
             fr = _gradual_seek(40);
             if (fr != FR_OK) break;
             u32 = _total_bytes;
-            blocking_wait_core0_grant();
+            _blocking_wait_core0_grant();
             fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
             if (fr != FR_OK || bw != sizeof(uint32_t)) break;
-            blocking_wait_core0_grant();
+            _blocking_wait_core0_grant();
             fr = f_sync(&_fil);
             if (fr != FR_OK) break;
 
-            blocking_wait_core0_grant();
+            _blocking_wait_core0_grant();
             fr = _gradual_seek(cur_pos);
             if (fr != FR_OK) break;
-            blocking_wait_core0_grant();
+            _blocking_wait_core0_grant();
             fr = f_close(&_fil);
             if (fr != FR_OK) break;
         }
 
-        drain_core0_grant();
+        _drain_core0_grant();
         return;
     }
 
@@ -780,7 +790,7 @@ FRESULT spdif_rec_wav::_gradual_seek(DWORD target_pos)
                 cur_pos = target_pos;
             }
         }
-        blocking_wait_core0_grant();
+        _blocking_wait_core0_grant();
         fr = f_lseek(&_fil, cur_pos);
         if (fr != FR_OK) break;
     }
@@ -813,10 +823,13 @@ uint32_t spdif_rec_wav::_write_core(const uint32_t* buff, const uint32_t sub_fra
         }
     }
 
+    // comment below to let FATFS to do f_sync() timing for better performance
+    /*
     fr = f_sync(&_fil);
     if (fr != FR_OK) {
         _report_error(error_type_t::WAV_DATA_SYNC_FAIL);
     }
+    */
 
     return static_cast<uint32_t>(bw);
 }

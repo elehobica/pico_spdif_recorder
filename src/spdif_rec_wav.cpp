@@ -6,7 +6,6 @@
 
 #include "spdif_rec_wav.h"
 
-#include <iostream>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -15,7 +14,7 @@
 
 #include "fatfs/ff.h"
 
-static inline uint64_t _micros(void)
+static inline uint64_t _micros()
 {
     return to_us_since_boot(get_absolute_time());
 }
@@ -32,7 +31,7 @@ void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_
 /  Class variables
 /-----------------*/
 
-void           (*spdif_rec_wav::_wait_grant_func)();
+void           (*spdif_rec_wav::_wait_grant_func)() = nullptr;
 const char*    spdif_rec_wav::_suffix_info_filename;
 int            spdif_rec_wav::_suffix;
 char           spdif_rec_wav::_log_filename[16];
@@ -94,6 +93,47 @@ void spdif_rec_wav::process_file_cmd()
             }
         }
     }
+}
+
+bool spdif_rec_wav::is_standby()
+{
+    return _standby_flag;
+}
+
+bool spdif_rec_wav::is_recording()
+{
+    return _recording_flag;
+}
+
+void spdif_rec_wav::set_blank_split(const bool flag)
+{
+    _blank_split = flag;
+}
+
+bool spdif_rec_wav::get_blank_split()
+{
+    return _blank_split;
+}
+
+void spdif_rec_wav::set_verbose(const bool flag)
+{
+    _verbose = flag;
+}
+
+bool spdif_rec_wav::get_verbose()
+{
+    return _verbose;
+}
+
+int spdif_rec_wav::get_suffix()
+{
+    return _suffix;
+}
+
+void spdif_rec_wav::clear_suffix()
+{
+    _suffix = 1;
+    _clear_log = true;
 }
 
 void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suffix_info_filename)
@@ -194,7 +234,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
             _clear_log = false;
 
             if (_verbose) {
-                printf("wav bw required:  %7.2f KB/s\r\n", (float) (static_cast<uint32_t>(bits_per_sample)*sample_freq*2/8) / 1e3);
+                printf("wav bw required:  %7.2f KB/s\r\n", static_cast<float>((static_cast<uint32_t>(bits_per_sample))*sample_freq*2/8) / 1e3);
             }
             _set_last_suffix(_suffix);
 
@@ -311,47 +351,6 @@ void spdif_rec_wav::split_recording(const bits_per_sample_t bits_per_sample)
     start_recording(bits_per_sample);
 }
 
-bool spdif_rec_wav::is_standby()
-{
-    return _standby_flag;
-}
-
-bool spdif_rec_wav::is_recording()
-{
-    return _recording_flag;
-}
-
-void spdif_rec_wav::set_blank_split(const bool flag)
-{
-    _blank_split = flag;
-}
-
-bool spdif_rec_wav::get_blank_split()
-{
-    return _blank_split;
-}
-
-void spdif_rec_wav::set_verbose(const bool flag)
-{
-    _verbose = flag;
-}
-
-bool spdif_rec_wav::get_verbose()
-{
-    return _verbose;
-}
-
-int spdif_rec_wav::get_suffix()
-{
-    return _suffix;
-}
-
-void spdif_rec_wav::clear_suffix()
-{
-    _suffix = 1;
-    _clear_log = true;
-}
-
 /*--------------------------/
 /  Protected class functions
 /--------------------------*/
@@ -359,7 +358,9 @@ void spdif_rec_wav::_blocking_wait_core0_grant()
 {
     _drain_core0_grant();
     while (queue_is_empty(&_core0_grant_queue)) {
-        (*_wait_grant_func)();
+        if (_wait_grant_func != nullptr) {
+            (*_wait_grant_func)();
+        }
     }
 }
 
@@ -400,13 +401,13 @@ void spdif_rec_wav::_process_error()
             break;
         }
         case error_type_t::FILE_CMD_QUEUE_FULL:
-            _log_printf("ERROR: _file_cmd_queue is full (cmd=%d)\r\n", (int) packet.param);
+            _log_printf("ERROR: _file_cmd_queue is full (cmd=%d)\r\n", static_cast<int>(packet.param));
             break;
         case error_type_t::FILE_CMD_REPLY_QUEUE_FULL:
-            _log_printf("ERROR: _file_cmd_reply_queue is full (cmd=%d)\r\n", (int) packet.param);
+            _log_printf("ERROR: _file_cmd_reply_queue is full (cmd=%d)\r\n", static_cast<int>(packet.param));
             break;
         case error_type_t::RECORD_CMD_QUEUE_FULL:
-            _log_printf("ERROR: _record_cmd_queue is full (cmd=%d)\r\n", (int) packet.param);
+            _log_printf("ERROR: _record_cmd_queue is full (cmd=%d)\r\n", static_cast<int>(packet.param));
             break;
         case error_type_t::WAV_OPEN_FAIL:
             _log_printf("ERROR: wav file open failed\r\n");
@@ -600,7 +601,7 @@ spdif_rec_wav::blank_status_t spdif_rec_wav::_scan_blank(const uint32_t* buff, c
         data_accum += std::abs(static_cast<int16_t>(((buff[i] >> 12) & 0xffff)));
     }
 
-    float time_sec = (float) sub_frame_count / NUM_CHANNELS / sample_freq;
+    float time_sec = static_cast<float>(sub_frame_count) / NUM_CHANNELS / sample_freq;
 
     uint32_t ave_level = data_accum / sub_frame_count;
     if (ave_level < BLANK_LEVEL) {
@@ -725,7 +726,7 @@ spdif_rec_wav::~spdif_rec_wav()
 
             // ChunkSize
             _blocking_wait_core0_grant();
-            fr = _gradual_seek(4);
+            fr = _stepwise_seek(4);
             if (fr != FR_OK) break;
             u32 = _total_bytes + (WAV_HEADER_SIZE - 8);
             _blocking_wait_core0_grant();
@@ -737,7 +738,7 @@ spdif_rec_wav::~spdif_rec_wav()
 
             // Subchunk2Size
             _blocking_wait_core0_grant();
-            fr = _gradual_seek(40);
+            fr = _stepwise_seek(40);
             if (fr != FR_OK) break;
             u32 = _total_bytes;
             _blocking_wait_core0_grant();
@@ -748,7 +749,7 @@ spdif_rec_wav::~spdif_rec_wav()
             if (fr != FR_OK) break;
 
             _blocking_wait_core0_grant();
-            fr = _gradual_seek(cur_pos);
+            fr = _stepwise_seek(cur_pos);
             if (fr != FR_OK) break;
             _blocking_wait_core0_grant();
             fr = f_close(&_fil);
@@ -769,12 +770,12 @@ spdif_rec_wav::~spdif_rec_wav()
 /*-----------------------------/
 /  Protected Member functions
 /-----------------------------*/
-FRESULT spdif_rec_wav::_gradual_seek(DWORD target_pos)
+FRESULT spdif_rec_wav::_stepwise_seek(DWORD target_pos)
 {
     FRESULT fr;     /* FatFs return code */
 
     DWORD cur_pos = f_tell(&_fil);
-    int64_t diff = (int64_t) target_pos - cur_pos;
+    int64_t diff = static_cast<int64_t>(target_pos) - cur_pos;
 
     while (cur_pos != target_pos) {
         if (diff >= 0) {
@@ -868,7 +869,7 @@ void spdif_rec_wav::_record_queue_level(uint queue_level)
 
 void spdif_rec_wav::_report_start()
 {
-    _log_printf("recording start \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", _filename.c_str(), _bits_per_sample, (float) _sample_freq*1e-3, (float) _bits_per_sample*_sample_freq*2*1e-3);
+    _log_printf("recording start \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", _filename.c_str(), _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3);
 }
 
 void spdif_rec_wav::_report_final()
@@ -877,14 +878,14 @@ void spdif_rec_wav::_report_final()
     uint32_t total_sec_dp = static_cast<uint64_t>(_total_bytes) / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS * 1000 / _sample_freq - total_sec*1000;
     _log_printf("recording done \"%s\" %lu bytes (time:  %d:%02d.%03d)\r\n", _filename.c_str(), _total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
     if (_verbose) {
-        float avg_bw = (float) _total_bytes / _total_time_us * 1e3;
+        float avg_bw = static_cast<float>(_total_bytes) / _total_time_us * 1e3;
         printf("SD Card writing bandwidth\r\n");
         printf(" avg:   %7.2f KB/s\r\n", avg_bw);
         printf(" best:  %7.2f KB/s\r\n", _best_bandwidth);
         printf(" worst: %7.2f KB/s\r\n", _worst_bandwidth);
         printf("WAV file required bandwidth\r\n");
-        printf(" wav:   %7.2f KB/s\r\n", (float) (static_cast<uint32_t>(_bits_per_sample)*_sample_freq*2/8) / 1e3);
-        printf("spdif queue usage: %7.2f %%\r\n", (float) _queue_worst / SPDIF_QUEUE_LENGTH * 100);
+        printf(" wav:   %7.2f KB/s\r\n", static_cast<float>((static_cast<uint32_t>(_bits_per_sample)*_sample_freq*2/8)) / 1e3);
+        printf("spdif queue usage: %7.2f %%\r\n", static_cast<float>(_queue_worst) / SPDIF_QUEUE_LENGTH * 100);
     }
 }
 

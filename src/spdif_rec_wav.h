@@ -25,14 +25,9 @@ public:
     };
 
     // === Public class functions ===
-    // process on core0
+    // functions called from core0
     static void set_wait_grant_func(void (*func)());
     static void process_file_cmd();
-    // process on core1
-    static void record_process_loop(const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
-    static void start_recording(const bits_per_sample_t bits_per_sample, const bool standby = false);
-    static void end_recording(const bool split = false);
-    static void split_recording(const bits_per_sample_t bits_per_sample);
     static bool is_standby();
     static bool is_recording();
     static void set_blank_split(const bool flag);
@@ -41,6 +36,12 @@ public:
     static bool get_verbose();
     static int get_suffix();
     static void clear_suffix();
+    // functions called from core1
+    static void record_process_loop(const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
+    // functions called from core0 and core1
+    static void start_recording(const bits_per_sample_t bits_per_sample, const bool standby = false);
+    static void end_recording(const bool split = false);
+    static void split_recording(const bits_per_sample_t bits_per_sample);
 
 protected:
     enum class inst_status_t {
@@ -54,7 +55,7 @@ protected:
         spdif_rec_wav* inst;
         inst_status_t status;
         inst_with_status_t(inst_status_t status = inst_status_t::RESET) : inst(nullptr), status(status) {}
-        ~inst_with_status_t() {}
+        virtual ~inst_with_status_t() {}
         void reset() { inst = nullptr; status = inst_status_t::RESET; }
     };
     enum class file_cmd_type_t {
@@ -138,7 +139,8 @@ protected:
     static queue_t _error_queue;
     static queue_t _core0_grant_queue;
 
-    // constructor and destructor assume to be processed on core0
+    // === Constructor and Destructor ===
+    // called from core0
     spdif_rec_wav(const std::string filename, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     virtual ~spdif_rec_wav();
 
@@ -155,10 +157,10 @@ protected:
     bool                    _data_written;
 
     // === Private class functions ===
-    // process on core0
+    // functions called from core0
     static void _blocking_wait_core0_grant();
     static void _drain_core0_grant();
-    // process on core1
+    // functions called from core1
     static void _process_file_reply_cmd();
     static void _process_error();
     static void _req_prepare_file(inst_with_status_t& inst_w_sts, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
@@ -172,9 +174,9 @@ protected:
     static blank_status_t _scan_blank(const uint32_t* buff, const uint32_t sub_frame_count, const uint32_t sample_freq);
 
     // === Private member functions ===
-    // process on core0
-    FRESULT _gradual_seek(DWORD target_pos);
-    // process on core1
+    // functions called from core0
+    FRESULT _stepwise_seek(DWORD target_pos);
+    // functions called from core1
     void _reset_blank_scan_sec();
     uint32_t _write_core(const uint32_t* buff, const uint32_t sub_frame_count);
     uint32_t _write(const uint32_t* buff, const uint32_t sub_frame_count);

@@ -71,10 +71,10 @@ void fatfs_config()
     pico_fatfs_set_config(&fatfs_spi_config);
 }
 
-void spdif_rec_wav_process_loop()
+void spdif_rec_wav_record_process_loop()
 {
     core1_running = true;
-    spdif_rec_wav::process_loop();
+    spdif_rec_wav::record_process_loop();
     core1_running = false;
 }
 
@@ -99,10 +99,17 @@ void show_help(spdif_rec_wav::bits_per_sample_t bits_per_sample)
     printf("---------------------------\r\n");
 }
 
+void wait_led_blink()
+{
+    gpio_put(PIN_LED, (_millis() / 100) % 2 == 0);
+    sleep_ms(10);
+}
+
 int main()
 {
     int count = 0;
     bool wait_sync = false;
+    bool user_standy = false;
     bool standby_repeat = true;
     spdif_rec_wav::bits_per_sample_t bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
     char c;
@@ -130,9 +137,10 @@ int main()
     sleep_ms(500);  // wait for USB serial terminal to be responded
     printf("\r\n");
 
+    spdif_rec_wav::set_wait_grant_func(wait_led_blink);
     // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
-    multicore_launch_core1(spdif_rec_wav_process_loop);
+    multicore_launch_core1(spdif_rec_wav_record_process_loop);
 
     sleep_ms(500);  // wait for FATFS to be mounted
 
@@ -155,33 +163,51 @@ int main()
                 printf("start when sound detected\r\n");
                 spdif_rec_wav::start_recording(bits_per_sample, true);  // standby start
                 wait_sync = false;
+                user_standy = true;
             }
         }
         if (lost_stable_flg) {
             lost_stable_flg = false;
             printf("lost stable sync. waiting for signal\r\n");
-            if (spdif_rec_wav::is_recording()) {
+            if (spdif_rec_wav::is_standby() || spdif_rec_wav::is_recording()) {
                 spdif_rec_wav::end_recording();
                 wait_sync = standby_repeat;
+                user_standy = false;
             }
         }
         if ((c = getchar_timeout_us(1)) > 0) {
             if (c == ' ') {
-                if (spdif_rec_wav::is_recording()) {
+                if (spdif_rec_wav::is_standby()) {
+                    if (user_standy) {
+                        printf("cancelled\r\n");
+                        spdif_rec_wav::end_recording();
+                        user_standy = false;
+                        standby_repeat = false;
+                    } else {
+                        // no command needed because already in standby
+                        printf("start when sound detected\r\n");
+                        user_standy = true;
+                        standby_repeat = true;
+                    }
+                } else if (spdif_rec_wav::is_recording()) {
                     spdif_rec_wav::end_recording();
+                    user_standy = false;
                     standby_repeat = false;
                 } else if (wait_sync) {
                     printf("wait_sync cancelled\r\n");
                     wait_sync = false;
+                    user_standy = false;
                     standby_repeat = false;
                 } else if (spdif_rx_get_state() == SPDIF_RX_STATE_STABLE) {
                     printf("start when sound detected\r\n");
                     spdif_rec_wav::start_recording(bits_per_sample, true);  // standby start
                     wait_sync = false;
+                    user_standy = true;
                     standby_repeat = true;
                 } else {
                     printf("start when stable sync detected\r\n");
                     wait_sync = true;
+                    user_standy = true;
                     standby_repeat = true;
                 }
             } else if (c == 's') {
@@ -189,7 +215,7 @@ int main()
                     spdif_rec_wav::split_recording(bits_per_sample);
                 }
             } else if (c == 'r') {
-                if (!spdif_rec_wav::is_recording()) {
+                if (!spdif_rec_wav::is_standby() && !spdif_rec_wav::is_recording()) {
                     if (bits_per_sample == spdif_rec_wav::bits_per_sample_t::_16BITS) {
                         bits_per_sample = spdif_rec_wav::bits_per_sample_t::_24BITS;
                     } else {
@@ -206,7 +232,7 @@ int main()
                 spdif_rec_wav::set_verbose(verbose);
                 printf("verbose: %s\r\n", verbose ? "on" : "off");
             } else if (c == 'c') {
-                if (!spdif_rec_wav::is_recording()) {
+                if (!spdif_rec_wav::is_standby() && !spdif_rec_wav::is_recording()) {
                     spdif_rec_wav::clear_suffix();
                     printf("suffix to rec: %03d\r\n", spdif_rec_wav::get_suffix());
                 }
@@ -221,6 +247,9 @@ int main()
         } else {
             gpio_put(PIN_LED, false);
         }
+
+        // background file process on core0
+        spdif_rec_wav::process_file_cmd();
 
         tight_loop_contents();
         sleep_ms(10);

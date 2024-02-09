@@ -19,6 +19,7 @@ void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_
 class spdif_rec_wav
 {
 public:
+    // === Public definitions of class ===
     enum class bits_per_sample_t {
         _16BITS = 16,
         _24BITS = 24,
@@ -44,6 +45,7 @@ public:
     static void split_recording(const bits_per_sample_t bits_per_sample);
 
 protected:
+    // === Private definitions of class ===
     enum class inst_status_t {
         RESET = 0,
         REQ_PREPARE,
@@ -103,6 +105,24 @@ protected:
         uint32_t sub_frame_count;
     } sub_frame_buf_info_t;
 
+    // === Private class functions ===
+    // functions called from core0
+    static void _blocking_wait_core0_grant();
+    static void _drain_core0_grant();
+    // functions called from core1
+    static void _process_file_reply_cmd();
+    static void _process_error();
+    static void _req_prepare_file(inst_with_status_t& inst_w_sts, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
+    static void _req_finalize_file(inst_with_status_t& inst_w_sts, const bool report_final = true);
+    static void _report_error(const error_type_t type, const uint32_t param = 0L);
+    static void _send_core0_grant();
+    static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
+    static void _log_printf(const char* fmt, ...);
+    static int _get_last_suffix();
+    static void _set_last_suffix(int suffix);
+    static blank_status_t _scan_blank(const uint32_t* buff, const uint32_t sub_frame_count, const uint32_t sample_freq);
+
+    // === Private class constants ===
     static constexpr int NUM_CHANNELS = 2;
     static constexpr int NUM_SUB_FRAME_BUF = 96; // maximize buffers to the limit for the margin of writing latency as much as possible
     static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
@@ -118,6 +138,8 @@ protected:
     static constexpr const char* WAV_PREFIX = "record_";
     static constexpr uint32_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB
     static constexpr uint32_t MAX_TOTAL_BYTES = 0xfff00000;  // max total bytes of wav data to avoid 32bit overflow
+
+    // === Private class variables ===
     static void (*_wait_grant_func)();
     static const char* _suffix_info_filename;
     static int _suffix;
@@ -139,39 +161,10 @@ protected:
     static queue_t _error_queue;
     static queue_t _core0_grant_queue;
 
-    // === Constructor and Destructor ===
+    // === Constructor and Destructor (Private use) ===
     // called from core0
     spdif_rec_wav(const std::string filename, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     virtual ~spdif_rec_wav();
-
-    FIL                     _fil;
-    const std::string       _filename;
-    const uint32_t          _sample_freq;
-    const bits_per_sample_t _bits_per_sample;
-    uint32_t                _total_sample_count;
-    uint32_t                _total_bytes;
-    uint32_t                _total_time_us;
-    float                   _best_bandwidth;
-    float                   _worst_bandwidth;
-    uint                    _queue_worst;
-    bool                    _data_written;
-
-    // === Private class functions ===
-    // functions called from core0
-    static void _blocking_wait_core0_grant();
-    static void _drain_core0_grant();
-    // functions called from core1
-    static void _process_file_reply_cmd();
-    static void _process_error();
-    static void _req_prepare_file(inst_with_status_t& inst_w_sts, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
-    static void _req_finalize_file(inst_with_status_t& inst_w_sts, const bool report_final = true);
-    static void _report_error(const error_type_t type, const uint32_t param = 0L);
-    static void _send_core0_grant();
-    static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
-    static void _log_printf(const char* fmt, ...);
-    static int _get_last_suffix();
-    static void _set_last_suffix(int suffix);
-    static blank_status_t _scan_blank(const uint32_t* buff, const uint32_t sub_frame_count, const uint32_t sample_freq);
 
     // === Private member functions ===
     // functions called from core0
@@ -183,7 +176,19 @@ protected:
     void _record_queue_level(uint queue_level);
     void _report_start();
     void _report_final();
-    bool _is_data_written();
+
+    // === Private member variables ===
+    FIL                     _fil;
+    const std::string       _filename;
+    const uint32_t          _sample_freq;
+    const bits_per_sample_t _bits_per_sample;
+    uint32_t                _total_sample_count;
+    uint32_t                _total_bytes;
+    uint32_t                _total_time_us;
+    float                   _best_bandwidth;
+    float                   _worst_bandwidth;
+    uint                    _worst_queue_level;
+    bool                    _data_written;
 
     friend void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err);
 };

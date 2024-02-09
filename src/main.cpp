@@ -102,6 +102,10 @@ void show_help(spdif_rec_wav::bits_per_sample_t bits_per_sample)
 void wait_led_blink()
 {
     gpio_put(PIN_LED, (_millis() / 100) % 2 == 0);
+    if (getchar_timeout_us(1) > 0) {
+        printf("can't accept any commands during background file process\r\n");
+        while (getchar_timeout_us(1) >= 0) {};  // Discard any input.
+    }
     sleep_ms(10);
 }
 

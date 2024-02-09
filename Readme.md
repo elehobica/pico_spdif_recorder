@@ -74,3 +74,14 @@ Note:
 | c | Clear WAV file suffix to 1 |
 | h | Help |
 
+## microSD card recommendation
+* Due to the limitation of single bit SPI interface driven by Raspberry Pi Pico, even with highest class microSD cards (as of 2024), recording in 24bit 176.4 KHz or 192.0 KHz is challenging. It will sometimes causes the drops of audio sampling data. The bandwidth status can be monitored in Verbose mode.
+* With following recommended microSD cards, recording in 24bit 96.0 KHz will be stable as far as experimentally confirmed.
+* Format micorSD card in exFAT with [official SD Card Formatter](https://www.sdcard.org/downloads/formatter/) before usage. 
+
+| Vendor | Product Name | Part Number |
+----|----|----
+| SanDisk | Extreme PRO 256GB | SDSQXCD-256G-GN6MA |
+| Samsung | PRO Plus 256GB | MB-MD256SA |
+
+<img src="doc/sandisk-extreme-pro-256gb.jpg" width="80" />  <img src="doc/samsung-pro-plus-256gb.jpg" width="80" />

@@ -3,34 +3,34 @@
 ## Overview
 * Hi-Res WAV recorder from S/PDIF input to microSD card
 * Audio format: 2ch, 16bit or 24bit
-* Sampling frequencies: 44.1 KHz, 48.0 KHz, 88.2 KHz, 96.0 KHz (, 176.4 KHz, 192.0 KHz)
-* Auto split detecting blank
-* Manual split without gap
+* Recordable Sampling frequencies: 44.1 KHz, 48.0 KHz, 88.2 KHz, 96.0 KHz (, 176.4 KHz, 192.0 KHz)
+* WAV file auto split detecting blank
+* WAV file manual split without gap
 
 ## Supported Board and Peripheral Devices
 * Raspberry Pi Pico (rp2040)
-* SPDIF Coaxial or TOSLINK Rx module (DLR1160 or equivalent)
+* S/PDIF Coaxial or TOSLINK Rx module (DLR1160 or equivalent)
 * microSD cards (recommend SD-XC, V30 cards)
 
 ## Pin Assignment & Connection
 
-![Circuit Diagram](doc/Pico_FatFs_Test_Schematic_wo_pullup.png)
+![Circuit Diagram](doc/pico_spdif_recorder_circuit.png)
 
-### SPDIF Rx
+### S/PDIF Rx
 | Pico Pin # | GPIO | Function | Connection |
 ----|----|----|----
-| 20 | GP15 | DATA | from SPDIF data |
+| 20 | GP15 | DATA | from S/PDIF data |
 
 ### microSD card
 
-| Pico Pin # | Pin Name | Function | microSD connector | microSD SPI board |
+| Pico Pin # | Pin Name | Function | microSD Pin Name | microSD Pin # |
 ----|----|----|----|----
-|  4 | GP2 | SPI0_SCK | CLK (5) | CLK |
-|  5 | GP3 | SPI0_TX | CMD (3) | MOSI |
-|  6 | GP4 | SPI0_RX | DAT0 (7) | MISO |
-|  7 | GP5 | SPI0_CSn | CD/DAT3 (2) | CS |
-|  8 | GND | GND | VSS (6) | GND |
-| 36 | 3V3(OUT) | 3.3V | VDD (4) | 3V3 |
+|  4 | GP2 | SPI0_SCK | CLK | 5 |
+|  5 | GP3 | SPI0_TX | CMD | 3 |
+|  6 | GP4 | SPI0_RX | DAT0 | 7 |
+|  7 | GP5 | SPI0_CSn | CD/DAT3 | 2 |
+|  8 | GND | GND | VSS | 6 |
+| 36 | 3V3(OUT) | 3.3V | VDD | 4 |
 
 Note:
 
@@ -67,9 +67,9 @@ Note:
 | Key | Function |
 ----|----
 | Space | Recording Standby / Recording Stop |
-| s | Immediate split |
 | r | Resolution change 16bit/24bit (default: 16bit) |
-| b | Blank split on/off (default: on) |
+| s | Manual split |
+| b | Auto blank split on/off (default: on) |
 | v | Verbose for monitoring messages |
 | c | Clear WAV file suffix to 1 |
 | h | Help |

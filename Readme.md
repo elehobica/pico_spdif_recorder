@@ -33,8 +33,13 @@
 | 36 | 3V3(OUT) | 3.3V | VDD | 4 |
 
 Note:
-
 * As for the wire length between Pico and SD card, short wiring as possible is desired, otherwise errors such as Mount error and Write fail will occur.
+
+### Button/Switch (Optional)
+| Pico Pin # | GPIO | Function | Connection |
+----|----|----|----
+| 9 | GP6 | Input | 16bit/24bit switch |
+| 10 | GP7 | Input | Start/Stop button |
 
 ## How to build
 * See ["Getting started with Raspberry Pi Pico"](https://datasheets.raspberrypi.org/pico/getting-started-with-pico.pdf)
@@ -66,13 +71,17 @@ Note:
 
 | Key | Function |
 ----|----
-| Space | Recording Standby / Recording Stop |
+| Space | Recording Start Standby / Recording Stop |
 | r | Resolution change 16bit/24bit (default: 16bit) |
 | s | Manual split |
 | b | Auto blank split on/off (default: on) |
 | v | Verbose for monitoring messages |
 | c | Clear WAV file suffix to 1 |
 | h | Help |
+
+### LED indicator
+* Slow blink: Recording is on-going.
+* Fast blink: Background file proceses to close previous file and prepare next file are on-going. During this term, no command requests can be accepted.
 
 ## microSD card recommendation
 * Due to the limitation of single bit SPI interface driven by Raspberry Pi Pico, even with highest class microSD cards (as of 2024), recording in 24bit 176.4 KHz or 192.0 KHz is challenging. It will sometimes causes the drops of audio sampling data. The bandwidth status can be monitored in Verbose mode.

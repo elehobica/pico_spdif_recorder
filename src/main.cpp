@@ -9,6 +9,7 @@
 
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
+#include "pico/util/queue.h"
 
 #include "spdif_rx.h"
 #include "spdif_rec_wav.h"
@@ -18,9 +19,28 @@ static constexpr uint PIN_LED = PICO_DEFAULT_LED_PIN;
 
 static constexpr uint8_t PIN_DCDC_PSM_CTRL = 23;
 static constexpr uint8_t PIN_PICO_SPDIF_RX_DATA = 15;
+
+static constexpr uint PIN_SWITCH_24BIT      = 6;
+static constexpr uint PIN_BUTTON_START_STOP = 7;
+
+static constexpr int INTERVAL_BUTTONS_CHECK_MS = 50;
+static constexpr int NUM_SIGNAL_FILTER_STEPS = 2;  // 1 ~ 31
+static constexpr uint32_t SIGNAL_FILTER_MASK = ((1UL << NUM_SIGNAL_FILTER_STEPS) - 1);
+static constexpr int SIGNAL_EVENT_QUEUE_LENGTH = 1;
+
+static repeating_timer_t timer;
+static uint32_t signal_history[2];
+static uint32_t signal_history_filtered_pos[2] = {0UL, 0UL};
+static uint32_t signal_history_filtered_neg[2] = {~0UL, ~0UL};
 static bool core1_running = false;
 volatile static bool stable_flg = false;
 volatile static bool lost_stable_flg = false;
+static queue_t signal_event_queue;
+enum class signal_event_t {
+    BUTTON_PUSHED = 0,
+    SWITCH_ON,
+    SWITCH_OFF
+};
 
 static inline uint32_t _millis()
 {
@@ -78,7 +98,7 @@ void spdif_rec_wav_record_process_loop()
     core1_running = false;
 }
 
-void show_help(spdif_rec_wav::bits_per_sample_t bits_per_sample)
+void show_help(const spdif_rec_wav::bits_per_sample_t bits_per_sample)
 {
     printf("---------------------------\r\n");
     printf(" bit resolution: %d bits\r\n", static_cast<int>(bits_per_sample));
@@ -88,25 +108,110 @@ void show_help(spdif_rec_wav::bits_per_sample_t bits_per_sample)
     printf("---------------------------\r\n");
     printf("[serial interface help]\r\n");
     printf(" ' ' to start/stop recording\r\n");
-    printf(" 'r' to switch 16/24 bits (*1)\r\n");
-    printf(" 's' to manual split (*2)\r\n");
+    printf(" 'r' to switch 16/24 bits\r\n");
+    printf(" 's' to manual split (*1)\r\n");
     printf(" 'b' to toggle auto blank split\r\n");
     printf(" 'v' to toggle verbose\r\n");
-    printf(" 'c' to clear suffix (*1)\r\n");
+    printf(" 'c' to clear suffix (*2)\r\n");
     printf(" 'h' to show this help\r\n");
-    printf("  (*1) not effective while recording\r\n");
-    printf("  (*2) not effective unless recording\r\n");
+    printf("  (*1) effective while recording\r\n");
+    printf("  (*2) effective while not recording\r\n");
     printf("---------------------------\r\n");
 }
 
 void wait_led_blink()
 {
     gpio_put(PIN_LED, (_millis() / 100) % 2 == 0);
+    if (!queue_is_empty(&signal_event_queue)) {
+        printf("can't accept any commands during background file process\r\n");
+        while (!queue_is_empty(&signal_event_queue)) {
+            signal_event_t event;
+            queue_remove_blocking(&signal_event_queue, &event);
+        }
+    }
     if (getchar_timeout_us(1) > 0) {
         printf("can't accept any commands during background file process\r\n");
         while (getchar_timeout_us(1) >= 0) {};  // Discard any input.
     }
     sleep_ms(10);
+}
+
+bool timer_callback_scan_buttons(repeating_timer_t *rt)
+{
+    uint32_t signal[2] = {
+        gpio_get(PIN_SWITCH_24BIT),
+        gpio_get(PIN_BUTTON_START_STOP)
+    };
+    for (int i = 0; i < sizeof(signal_history) / sizeof(uint32_t); i++) {
+        signal_history[i] = (signal_history[i] << 1) | (signal[i] & 0b1);
+        if ((signal_history[i] & SIGNAL_FILTER_MASK) == SIGNAL_FILTER_MASK) {
+            signal_history_filtered_pos[i] = (signal_history_filtered_pos[i] << 1) | 0b1;
+            signal_history_filtered_neg[i] = (signal_history_filtered_neg[i] << 1) | 0b1;
+        } else if ((signal_history[i] & SIGNAL_FILTER_MASK) == 0x0) {
+            signal_history_filtered_pos[i] = (signal_history_filtered_pos[i] << 1) | 0b0;
+            signal_history_filtered_neg[i] = (signal_history_filtered_neg[i] << 1) | 0b0;
+        } else {
+            signal_history_filtered_pos[i] = (signal_history_filtered_pos[i] << 1) | (signal_history_filtered_pos[i] & 0b1);
+            signal_history_filtered_neg[i] = (signal_history_filtered_neg[i] << 1) | (signal_history_filtered_neg[i] & 0b1);
+        }
+    }
+    if ((signal_history_filtered_pos[0] & 0b11) == 0b10) {
+        signal_event_t event = signal_event_t::SWITCH_ON;
+        queue_try_add(&signal_event_queue, &event);
+    } else if ((signal_history_filtered_neg[0] & 0b11) == 0b01) {
+        signal_event_t event = signal_event_t::SWITCH_OFF;
+        queue_try_add(&signal_event_queue, &event);
+    } else if ((signal_history_filtered_pos[1] & 0b11) == 0b10) {
+        signal_event_t event = signal_event_t::BUTTON_PUSHED;
+        queue_try_add(&signal_event_queue, &event);
+    }
+    return true; // keep repeating
+}
+
+void toggle_start_stop(const spdif_rec_wav::bits_per_sample_t bits_per_sample, bool& wait_sync, bool& user_standy, bool& standby_repeat)
+{
+    if (spdif_rec_wav::is_standby()) {
+        if (user_standy) {
+            printf("cancelled\r\n");
+            spdif_rec_wav::end_recording();
+            user_standy = false;
+            standby_repeat = false;
+        } else {
+            // no command needed because already in standby
+            printf("start when sound detected\r\n");
+            user_standy = true;
+            standby_repeat = true;
+        }
+    } else if (spdif_rec_wav::is_recording()) {
+        spdif_rec_wav::end_recording();
+        user_standy = false;
+        standby_repeat = false;
+    } else if (wait_sync) {
+        printf("wait_sync cancelled\r\n");
+        wait_sync = false;
+        user_standy = false;
+        standby_repeat = false;
+    } else if (spdif_rx_get_state() == SPDIF_RX_STATE_STABLE) {
+        printf("start when sound detected\r\n");
+        spdif_rec_wav::start_recording(bits_per_sample, true);  // standby start
+        wait_sync = false;
+        user_standy = true;
+        standby_repeat = true;
+    } else {
+        printf("start when stable sync detected\r\n");
+        wait_sync = true;
+        user_standy = true;
+        standby_repeat = true;
+    }
+}
+
+void toggle_bit_resolution(spdif_rec_wav::bits_per_sample_t& bits_per_sample)
+{
+    if (bits_per_sample == spdif_rec_wav::bits_per_sample_t::_16BITS) {
+        bits_per_sample = spdif_rec_wav::bits_per_sample_t::_24BITS;
+    } else {
+        bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
+    }
 }
 
 int main()
@@ -132,6 +237,15 @@ int main()
     gpio_set_dir(PIN_DCDC_PSM_CTRL, GPIO_OUT);
     gpio_put(PIN_DCDC_PSM_CTRL, 1); // PWM mode for less Audio noise
 
+    // Button/Switch
+    gpio_init(PIN_BUTTON_START_STOP);
+    gpio_set_dir(PIN_BUTTON_START_STOP, GPIO_IN);
+    gpio_pull_up(PIN_BUTTON_START_STOP);
+    gpio_init(PIN_SWITCH_24BIT);
+    gpio_set_dir(PIN_SWITCH_24BIT, GPIO_IN);
+    gpio_pull_up(PIN_SWITCH_24BIT);
+    bits_per_sample = gpio_get(PIN_SWITCH_24BIT) ? spdif_rec_wav::bits_per_sample_t::_16BITS : spdif_rec_wav::bits_per_sample_t::_24BITS;
+
     // spdif_rx initialize
     spdif_rx_init();
 
@@ -140,6 +254,15 @@ int main()
 
     sleep_ms(500);  // wait for USB serial terminal to be responded
     printf("\r\n");
+
+    // queue for Button/Switch
+    queue_init(&signal_event_queue, sizeof(signal_event_t), SIGNAL_EVENT_QUEUE_LENGTH);
+    // timer for Button/Switch
+    // negative timeout means exact delay (rather than delay between callbacks)
+    if (!add_repeating_timer_us(-INTERVAL_BUTTONS_CHECK_MS * 1000, timer_callback_scan_buttons, nullptr, &timer)) {
+        printf("Failed to add timer\r\n");
+        return 0;
+    }
 
     spdif_rec_wav::set_wait_grant_func(wait_led_blink);
     // spdif_rec_wav process runs on Core1
@@ -179,50 +302,41 @@ int main()
                 user_standy = false;
             }
         }
-        if ((c = getchar_timeout_us(1)) > 0) {
+        if (!queue_is_empty(&signal_event_queue)) {
+            signal_event_t event;
+            queue_remove_blocking(&signal_event_queue, &event);
+            if (event == signal_event_t::BUTTON_PUSHED) {
+                toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+            } else if (event == signal_event_t::SWITCH_ON) {
+                if (bits_per_sample != spdif_rec_wav::bits_per_sample_t::_24BITS) {
+                    toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                    bits_per_sample = spdif_rec_wav::bits_per_sample_t::_24BITS;
+                    sleep_ms(100);
+                    toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                }
+                printf("bit resolution: %d bits\r\n", bits_per_sample);
+            } else if (event == signal_event_t::SWITCH_OFF) {
+                if (bits_per_sample != spdif_rec_wav::bits_per_sample_t::_16BITS) {
+                    toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                    bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
+                    sleep_ms(100);
+                    toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                }
+                printf("bit resolution: %d bits\r\n", bits_per_sample);
+            }
+        } else if ((c = getchar_timeout_us(1)) > 0) {
             if (c == ' ') {
-                if (spdif_rec_wav::is_standby()) {
-                    if (user_standy) {
-                        printf("cancelled\r\n");
-                        spdif_rec_wav::end_recording();
-                        user_standy = false;
-                        standby_repeat = false;
-                    } else {
-                        // no command needed because already in standby
-                        printf("start when sound detected\r\n");
-                        user_standy = true;
-                        standby_repeat = true;
-                    }
-                } else if (spdif_rec_wav::is_recording()) {
-                    spdif_rec_wav::end_recording();
-                    user_standy = false;
-                    standby_repeat = false;
-                } else if (wait_sync) {
-                    printf("wait_sync cancelled\r\n");
-                    wait_sync = false;
-                    user_standy = false;
-                    standby_repeat = false;
-                } else if (spdif_rx_get_state() == SPDIF_RX_STATE_STABLE) {
-                    printf("start when sound detected\r\n");
-                    spdif_rec_wav::start_recording(bits_per_sample, true);  // standby start
-                    wait_sync = false;
-                    user_standy = true;
-                    standby_repeat = true;
-                } else {
-                    printf("start when stable sync detected\r\n");
-                    wait_sync = true;
-                    user_standy = true;
-                    standby_repeat = true;
-                }
+                toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
             } else if (c == 'r') {
-                if (!spdif_rec_wav::is_standby() && !spdif_rec_wav::is_recording()) {
-                    if (bits_per_sample == spdif_rec_wav::bits_per_sample_t::_16BITS) {
-                        bits_per_sample = spdif_rec_wav::bits_per_sample_t::_24BITS;
-                    } else {
-                        bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
-                    }
-                    printf("bit resolution: %d bits\r\n", bits_per_sample);
+                if (spdif_rec_wav::is_standby() || spdif_rec_wav::is_recording()) {
+                    toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                    toggle_bit_resolution(bits_per_sample);
+                    sleep_ms(100);
+                    toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                } else {
+                    toggle_bit_resolution(bits_per_sample);
                 }
+                printf("bit resolution: %d bits\r\n", bits_per_sample);
             } else if (c == 's') {
                 if (spdif_rec_wav::is_recording()) {
                     spdif_rec_wav::split_recording(bits_per_sample);

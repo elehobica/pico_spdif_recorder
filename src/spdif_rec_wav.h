@@ -41,7 +41,7 @@ public:
     static void record_process_loop(const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
     // functions called from core0 and core1
     static void start_recording(const bits_per_sample_t bits_per_sample, const bool standby = false);
-    static void end_recording(const bool split = false);
+    static void end_recording(const bool immediate_split = false, const float truncate_sec = 0.0f);
     static void split_recording(const bits_per_sample_t bits_per_sample);
 
 protected:
@@ -113,7 +113,7 @@ protected:
     static void _process_file_reply_cmd();
     static void _process_error();
     static void _req_prepare_file(inst_with_status_t& inst_w_sts, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
-    static void _req_finalize_file(inst_with_status_t& inst_w_sts, const bool report_final = true);
+    static void _req_finalize_file(inst_with_status_t& inst_w_sts, const bool report_final, const float truncate_sec = 0.0f);
     static void _report_error(const error_type_t type, const uint32_t param = 0L);
     static void _send_core0_grant();
     static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
@@ -173,6 +173,7 @@ protected:
     void _reset_blank_scan_sec();
     uint32_t _write_core(const uint32_t* buff, const uint32_t sub_frame_count);
     uint32_t _write(const uint32_t* buff, const uint32_t sub_frame_count);
+    void _set_truncate(const float sec);
     void _record_queue_level(uint queue_level);
     void _report_start();
     void _report_final();
@@ -182,13 +183,13 @@ protected:
     const std::string       _filename;
     const uint32_t          _sample_freq;
     const bits_per_sample_t _bits_per_sample;
-    uint32_t                _total_sample_count;
     uint32_t                _total_bytes;
     uint32_t                _total_time_us;
     float                   _best_bandwidth;
     float                   _worst_bandwidth;
     uint                    _worst_queue_level;
     bool                    _data_written;
+    float                   _truncate_sec;
 
     friend void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err);
 };

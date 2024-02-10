@@ -1,11 +1,9 @@
 # Raspberry Pi Pico spdif_recorder
 
 ## Overview
-* Hi-Res WAV recorder from S/PDIF input to microSD card
-* Audio format: 2ch, 16bit or 24bit
-* Recordable Sampling frequencies: 44.1 KHz, 48.0 KHz, 88.2 KHz, 96.0 KHz (, 176.4 KHz, 192.0 KHz)
-* WAV file auto split detecting blank
-* WAV file manual split without gap
+* Hi-Res recorder from S/PDIF input to WAV files on microSD card
+* Bit resolution: 16bit or 24bit (2ch)
+* Sampling frequency: 44.1 KHz, 48.0 KHz, 88.2 KHz, 96.0 KHz (, 176.4 KHz, 192.0 KHz)
 
 ## Supported Board and Peripheral Devices
 * Raspberry Pi Pico (rp2040)
@@ -78,6 +76,12 @@ Note:
 | v | Verbose for monitoring messages |
 | c | Clear WAV file suffix to 1 |
 | h | Help |
+
+### Recording start/stop/split features
+* Standby recording start while silence and auto start when sound detected
+* Auto stop and standby restart when long blank detected
+* Auto split of WAV file when short blank detected
+* Manual immediate split of WAV file without gap
 
 ### LED indicator
 * Slow blink: Recording is on-going.

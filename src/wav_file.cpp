@@ -31,6 +31,72 @@ static inline void _drain_core0_grant()
     wav_file_status::_drain_core0_grant();
 }
 
+static inline FRESULT _wrap_f_open(FIL* fp, const TCHAR* path, BYTE mode)
+{
+    _blocking_wait_core0_grant();
+    return f_open(fp, path, mode);
+}
+
+static inline FRESULT _wrap_f_close(FIL* fp)
+{
+    _blocking_wait_core0_grant();
+    return f_close(fp);
+}
+
+static inline FRESULT _wrap_f_read(FIL* fp, void* buff, UINT btr, UINT* br)
+{
+    _blocking_wait_core0_grant();
+    return f_read(fp, buff, btr, br);
+}
+
+static inline FRESULT _wrap_f_write(FIL* fp, const void* buff, UINT btw, UINT* bw)
+{
+    _blocking_wait_core0_grant();
+    return f_write(fp, buff, btw, bw);
+}
+
+static inline FRESULT _wrap_f_write_priority(FIL* fp, const void* buff, UINT btw, UINT* bw)
+{
+    // no blocking wait for core0 grant
+    return f_write(fp, buff, btw, bw);
+}
+
+static inline FRESULT _wrap_f_lseek(FIL* fp, FSIZE_t ofs)
+{
+    _blocking_wait_core0_grant();
+    return f_lseek(fp, ofs);
+}
+
+static inline FRESULT _wrap_f_truncate(FIL* fp)
+{
+    _blocking_wait_core0_grant();
+    return f_truncate(fp);
+}
+
+static inline FRESULT _wrap_f_sync(FIL* fp)
+{
+    _blocking_wait_core0_grant();
+    return f_sync(fp);
+}
+
+static inline FRESULT _wrap_f_sync_priority(FIL* fp)
+{
+    // no blocking wait for core0 grant
+    return f_sync(fp);
+}
+
+static inline FRESULT _wrap_f_unlink(const TCHAR* path)
+{
+    _blocking_wait_core0_grant();
+    return f_unlink(path);
+}
+
+static inline FSIZE_t _wrap_f_tell(FIL* fp)
+{
+    _blocking_wait_core0_grant();
+    return f_tell(fp);
+}
+
 /*-----------------/
 /  Class variables
 /-----------------*/
@@ -60,6 +126,7 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
     sprintf(wav_filename, "%s%03d.wav", WAV_PREFIX, suffix);
     _filename = std::string(wav_filename);
 
+    _drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
         UINT bw;
@@ -67,10 +134,9 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
         uint16_t u16;
         uint32_t u32;
 
-        _blocking_wait_core0_grant();
-        fr = f_open(&_fil, _filename.c_str(), FA_WRITE | FA_CREATE_ALWAYS);
+        fr = _wrap_f_open(&_fil, _filename.c_str(), FA_WRITE | FA_CREATE_ALWAYS);
+        if (fr != FR_OK) break;
 
-        _blocking_wait_core0_grant();
         // ChunkID
         memcpy(&buf[0], "RIFF", 4);
         // ChunkSize (temporary 0)
@@ -107,14 +173,11 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
         // Subchunk2Size (temporary 0)
         memset(&buf[40], 0, 4);
 
-        _blocking_wait_core0_grant();
-        fr = f_write(&_fil, buf, sizeof(buf), &bw);
+        fr = _wrap_f_write(&_fil, buf, sizeof(buf), &bw);
         if (fr != FR_OK || bw != sizeof(buf)) break;
-        _blocking_wait_core0_grant();
-        fr = f_sync(&_fil);
+        fr = _wrap_f_sync(&_fil);
         if (fr != FR_OK) break;
 
-        _drain_core0_grant();
         return;
     }
 
@@ -132,68 +195,53 @@ wav_file::~wav_file()
 
         if (_total_bytes == 0) {
             // remove file if no samples
-            _blocking_wait_core0_grant();
-            fr = f_close(&_fil);
+            fr = _wrap_f_close(&_fil);
             if (fr != FR_OK) break;
 
-            _blocking_wait_core0_grant();
-            fr = f_unlink(_filename.c_str());
+            fr = _wrap_f_unlink(_filename.c_str());
             if (fr != FR_OK) break;
         } else {
             UINT bw;
             uint32_t u32;
-            _blocking_wait_core0_grant();
-            DWORD cur_pos = f_tell(&_fil);
+            DWORD cur_pos = _wrap_f_tell(&_fil);
 
             if (_truncate_sec > 0.0f) {
                 uint32_t truncate_bytes = static_cast<uint32_t>(_truncate_sec * (static_cast<uint32_t>(_bits_per_sample)/8) * NUM_CHANNELS * _sample_freq);
                 cur_pos -= truncate_bytes;
                 _total_bytes -= truncate_bytes;
-                _blocking_wait_core0_grant();
                 fr = _stepwise_seek(cur_pos);
                 if (fr != FR_OK) break;
-                _blocking_wait_core0_grant();
-                fr = f_truncate(&_fil);
+                fr = _wrap_f_truncate(&_fil);
                 if (fr != FR_OK) break;
             }
 
-            _blocking_wait_core0_grant();
-            fr = f_sync(&_fil);
+            fr = _wrap_f_sync(&_fil);
             if (fr != FR_OK) break;
 
             // ChunkSize
-            _blocking_wait_core0_grant();
             fr = _stepwise_seek(4);
             if (fr != FR_OK) break;
             u32 = _total_bytes + (WAV_HEADER_SIZE - 8);
-            _blocking_wait_core0_grant();
-            fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
+            fr = _wrap_f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
             if (fr != FR_OK || bw != sizeof(uint32_t)) break;
-            _blocking_wait_core0_grant();
-            fr = f_sync(&_fil);
+            fr = _wrap_f_sync(&_fil);
             if (fr != FR_OK) break;
 
             // Subchunk2Size
-            _blocking_wait_core0_grant();
             fr = _stepwise_seek(40);
             if (fr != FR_OK) break;
             u32 = _total_bytes;
-            _blocking_wait_core0_grant();
-            fr = f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
+            fr = _wrap_f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
             if (fr != FR_OK || bw != sizeof(uint32_t)) break;
-            _blocking_wait_core0_grant();
-            fr = f_sync(&_fil);
+            fr = _wrap_f_sync(&_fil);
             if (fr != FR_OK) break;
 
-            _blocking_wait_core0_grant();
             fr = _stepwise_seek(cur_pos);
             if (fr != FR_OK) break;
-            _blocking_wait_core0_grant();
-            fr = f_close(&_fil);
+            fr = _wrap_f_close(&_fil);
             if (fr != FR_OK) break;
         }
 
-        _drain_core0_grant();
         return;
     }
 
@@ -282,7 +330,7 @@ FRESULT wav_file::_stepwise_seek(DWORD target_pos)
 {
     FRESULT fr;     /* FatFs return code */
 
-    DWORD cur_pos = f_tell(&_fil);
+    DWORD cur_pos = _wrap_f_tell(&_fil);
     int64_t diff = static_cast<int64_t>(target_pos) - cur_pos;
 
     while (cur_pos != target_pos) {
@@ -299,8 +347,7 @@ FRESULT wav_file::_stepwise_seek(DWORD target_pos)
                 cur_pos = target_pos;
             }
         }
-        _blocking_wait_core0_grant();
-        fr = f_lseek(&_fil, cur_pos);
+        fr = _wrap_f_lseek(&_fil, cur_pos);
         if (fr != FR_OK) break;
     }
     return fr;
@@ -316,7 +363,7 @@ uint32_t wav_file::_write_core(const uint32_t* buff, const uint32_t sub_frame_co
             _wav_buf[i/2] >>= 16;
             _wav_buf[i/2] |= ((buff[i] >> 12) & 0xffff) << 16;
         }
-        fr = f_write(&_fil, static_cast<const void *>(_wav_buf), sub_frame_count*2, &bw);
+        fr = _wrap_f_write_priority(&_fil, static_cast<const void *>(_wav_buf), sub_frame_count*2, &bw);
         if (fr != FR_OK || bw != sub_frame_count*2) {
             spdif_rec_wav::_report_error(spdif_rec_wav::error_type_t::WAV_DATA_WRITE_FAIL);
         }
@@ -326,7 +373,7 @@ uint32_t wav_file::_write_core(const uint32_t* buff, const uint32_t sub_frame_co
             _wav_buf[j+1] = (((buff[i+2] >> 4) & 0x00ffff) << 16) | (((buff[i+1] >> 4) & 0xffff00) >>  8);
             _wav_buf[j+2] = (((buff[i+3] >> 4) & 0xffffff) <<  8) | (((buff[i+2] >> 4) & 0xff0000) >> 16);
         }
-        fr = f_write(&_fil, static_cast<const void *>(_wav_buf), sub_frame_count*3, &bw);
+        fr = _wrap_f_write_priority(&_fil, static_cast<const void *>(_wav_buf), sub_frame_count*3, &bw);
         if (fr != FR_OK || bw != sub_frame_count*3) {
             spdif_rec_wav::_report_error(spdif_rec_wav::error_type_t::WAV_DATA_WRITE_FAIL);
         }
@@ -334,7 +381,7 @@ uint32_t wav_file::_write_core(const uint32_t* buff, const uint32_t sub_frame_co
 
     // comment below to let FATFS to do f_sync() timing for better performance
     /*
-    fr = f_sync(&_fil);
+    fr = _wrap_f_sync_priority(&_fil);
     if (fr != FR_OK) {
         spdif_rec_wav::_report_error(spdif_rec_wav::error_type_t::WAV_DATA_SYNC_FAIL);
     }

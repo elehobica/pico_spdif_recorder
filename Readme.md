@@ -1,9 +1,11 @@
 # Raspberry Pi Pico spdif_recorder
 
+![PCB Front](doc/pico_spdif_recorder_pcb_front.jpg)
+
 ## Overview
 * Hi-Res recorder from S/PDIF input to WAV files on microSD card
 * Bit resolution: 16bit or 24bit (2ch)
-* Sampling frequency: 44.1 KHz, 48.0 KHz, 88.2 KHz, 96.0 KHz (, 176.4 KHz, 192.0 KHz)
+* Sampling frequency: 44.1 KHz, 48.0 KHz, 88.2 KHz, 96.0 KHz
 * Recording only, no monitoring or playback functions
 
 ## Supported Board and Peripheral Devices
@@ -89,7 +91,7 @@ Note:
 * Fast blink: Background file proceses to close previous file and prepare next file are on-going. During this term, no command requests can be accepted.
 
 ## microSD card recommendation
-* Due to the limitation of single bit SPI interface driven by Raspberry Pi Pico, even with highest class microSD cards (as of 2024), recording in 24bit 176.4 KHz or 192.0 KHz is challenging. It will sometimes causes the drops of audio sampling data. The bandwidth status can be monitored in Verbose mode.
+* Due to the limitation of single bit SPI interface driven by Raspberry Pi Pico, even with highest class microSD cards (as of 2024), recording in 24bit 176.4 KHz or 192.0 KHz is quite challenging. It will sometimes causes the drops of audio sampling data. The bandwidth status can be monitored in Verbose mode.
 * With following recommended microSD cards, recording in 24bit 96.0 KHz will be stable as far as experimentally confirmed.
 * Format micorSD card in exFAT with [official SD Card Formatter](https://www.sdcard.org/downloads/formatter/) before usage. 
 

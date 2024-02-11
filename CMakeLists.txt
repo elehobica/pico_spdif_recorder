@@ -20,6 +20,7 @@ add_subdirectory(lib/pico_fatfs)
 add_executable(${PROJECT_NAME}
     src/main.cpp
     src/spdif_rec_wav.cpp
+    src/write_wav.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}

@@ -23,6 +23,7 @@ public:
     // === Public class constants ===
     static constexpr int NUM_CHANNELS = 2;
     static constexpr int NUM_SUB_FRAME_BUF = 96; // maximize buffers to the limit for the margin of writing latency as much as possible
+    static constexpr const char* WAV_PREFIX = "record_";
 
     // === Public class functions ===
     // functions called from core0

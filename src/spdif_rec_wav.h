@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <string>
-
 #include "pico/util/queue.h"
 #include "write_wav.h"
 
@@ -33,13 +31,19 @@ public:
         WAV_CLOSE_FAIL,
         SUFFIX_FILE_FAIL
     };
+    enum class wav_status_t {
+        RESET = 0,
+        REQ_PREPARE,
+        PREPARED,
+        REQ_FINALIZE,
+        FINALIZED
+    };
 
     // === Public class constants ===
 
     // === Public class functions ===
     // functions called from core0
     static void set_wait_grant_func(void (*func)());
-    static void process_file_cmd();
     static bool is_standby();
     static bool is_recording();
     static void set_blank_split(const bool flag);
@@ -59,23 +63,15 @@ public:
     static void _report_error(const error_type_t type, const uint32_t param = 0L);
     static void _log_printf(const char* fmt, ...);
 
+    // === Public member functions ===
+    // functions called from core0
+    void set_status(wav_status_t status);
+
+    // === Public member variables ===
+    write_wav* inst;
+
 protected:
     // === Private definitions of class ===
-    enum class wav_status_t {
-        RESET = 0,
-        REQ_PREPARE,
-        PREPARED,
-        REQ_FINALIZE,
-        FINALIZED
-    };
-    enum class file_cmd_type_t {
-        PREPARE = 0,
-        FINALIZE
-    };
-    typedef struct _file_cmd_data_t {
-        file_cmd_type_t cmd;
-        uint32_t   param[4];
-    } file_cmd_data_t;
     enum class blank_status_t {
         NOT_BLANK = 0,
         BLANK_DETECTED,
@@ -105,7 +101,6 @@ protected:
     static constexpr int NUM_CHANNELS = write_wav::NUM_CHANNELS;
     static constexpr int NUM_SUB_FRAME_BUF = write_wav::NUM_SUB_FRAME_BUF;
     static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
-    static constexpr int FILE_CMD_QUEUE_LENGTH = 2;
     static constexpr int RECORD_CMD_QUEUE_LENGTH = 2;
     static constexpr int ERROR_QUEUE_LENGTH = 10;
     static constexpr int CORE0_GRANT_QUEUE_LENGTH = 1;
@@ -113,14 +108,10 @@ protected:
     static constexpr float BLANK_SEC = 0.5;  // the seconds to detect the blank
     static constexpr float BLANK_REPEAT_PROHIBIT_SEC = 10.0;  // the seconds within which detecting blank is prohibited
     static constexpr float BLANK_SKIP_SEC = 10.0;  // skip recording if blank time is longer than this seconds
-    static constexpr const char* WAV_PREFIX = "record_";
 
     // === Private class functions ===
     // functions called from core1
-    static void _process_file_reply_cmd();
     static void _process_error();
-    static void _req_prepare_file(spdif_rec_wav& inst_w_sts, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
-    static void _req_finalize_file(spdif_rec_wav& inst_w_sts, const bool report_final, const float truncate_sec = 0.0f);
     static void _send_core0_grant();
     static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
     static int _get_last_suffix();
@@ -142,8 +133,6 @@ protected:
     static bool _blank_split;
     static bool _verbose;
     static queue_t _spdif_queue;
-    static queue_t _file_cmd_queue;
-    static queue_t _file_cmd_reply_queue;
     static queue_t _record_cmd_queue;
     static queue_t _error_queue;
     static queue_t _core0_grant_queue;
@@ -156,19 +145,9 @@ protected:
     // === Private member functions ===
     // functions called from core0
     void reset();
-    /*
-    void prepare(const std::string filename, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
-    void finalize(bool report_flag, float truncate_sec = 0.0f);
-    */
-    /*
-    void prepare(file_cmd_data_t& cmd_data);
-    void finalize(file_cmd_data_t& cmd_data);
-    */
-    void _process_file_cmd(file_cmd_data_t& cmd_data);
 
     // === Private member variables ===
-    write_wav* inst;
-    volatile wav_status_t status;
+    wav_status_t _status;
 
     friend void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err);
 };

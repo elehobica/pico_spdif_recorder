@@ -13,6 +13,7 @@
 
 #include "spdif_rx.h"
 #include "spdif_rec_wav.h"
+#include "file_cmd.h"
 #include "tf_card.h"
 
 static constexpr uint PIN_LED = PICO_DEFAULT_LED_PIN;
@@ -367,7 +368,7 @@ int main()
         }
 
         // background file process on core0
-        spdif_rec_wav::process_file_cmd();
+        file_cmd::process_file_cmd();
 
         tight_loop_contents();
         sleep_ms(10);

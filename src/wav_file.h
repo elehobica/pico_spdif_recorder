@@ -17,7 +17,7 @@ enum class bits_per_sample_t {
     _24BITS = 24,
 };
 
-class write_wav
+class wav_file
 {
 public:
     // === Public class constants ===
@@ -30,8 +30,8 @@ public:
 
     // === Constructor and Destructor ===
     // called from core0
-    write_wav(const std::string filename, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
-    virtual ~write_wav();
+    wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
+    virtual ~wav_file();
 
     // === Public member functions ===
     // functions called from core1
@@ -61,7 +61,7 @@ protected:
 
     // === Private member variables ===
     FIL                     _fil;
-    const std::string       _filename;
+    std::string             _filename;
     const uint32_t          _sample_freq;
     const bits_per_sample_t _bits_per_sample;
     uint32_t                _total_bytes;

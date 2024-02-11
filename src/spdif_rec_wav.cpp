@@ -104,7 +104,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
     FATFS fs;
     uint32_t sample_freq;
     bits_per_sample_t bits_per_sample = bits_per_sample_t::_16BITS;
-    wav_file_status prev = wav_file_status(wav_file_status::wav_file_status_t::FINALIZED);
+    wav_file_status prev = wav_file_status(wav_file_status::status_t::FINALIZED);
     wav_file_status cur  = wav_file_status();
     wav_file_status next = wav_file_status();
     uint32_t* buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
@@ -173,10 +173,10 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 }
             }
 
-            if (next.is_status(wav_file_status::wav_file_status_t::RESET)) {
+            if (next.is_status(wav_file_status::status_t::RESET)) {
                 next.req_prepare(_suffix, sample_freq, bits_per_sample);
             }
-            next.wait_status(wav_file_status::wav_file_status_t::PREPARED);
+            next.wait_status(wav_file_status::status_t::PREPARED);
             cur = next;
             next.reset();
 
@@ -228,7 +228,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                         cur.record_queue_ratio(static_cast<float>(queue_level) / SPDIF_QUEUE_LENGTH);
                     }
                 } else if (queue_level < NUM_SUB_FRAME_BUF/4) {
-                    if (cur.is_data_written() && next.is_status(wav_file_status::wav_file_status_t::RESET)) {
+                    if (cur.is_data_written() && next.is_status(wav_file_status::status_t::RESET)) {
                         // prepare next file
                         next.req_prepare(_suffix + 1, sample_freq, bits_per_sample);
                     }
@@ -246,16 +246,16 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 }
             }
 
-            prev.wait_status(wav_file_status::wav_file_status_t::FINALIZED);
+            prev.wait_status(wav_file_status::status_t::FINALIZED);
             prev = cur;
             float truncate_sec = *(reinterpret_cast<float*>(&record_cmd_data.param[0]));
             prev.req_finalize(true, truncate_sec);
 
             if (record_cmd_data.cmd == record_cmd_type_t::END_CMD) {
                 _recording_flag = false;
-                prev.wait_status(wav_file_status::wav_file_status_t::FINALIZED);
+                prev.wait_status(wav_file_status::status_t::FINALIZED);
                 next.req_finalize(false);
-                next.wait_status(wav_file_status::wav_file_status_t::FINALIZED);
+                next.wait_status(wav_file_status::status_t::FINALIZED);
                 next.reset();
 
                 // drain remained spdif queue to delete samples which should not be included in next wav

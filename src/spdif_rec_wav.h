@@ -7,15 +7,16 @@
 #pragma once
 
 #include "pico/util/queue.h"
-#include "write_wav.h"
+#include "wav_file.h"
 
 extern "C" {
 void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err);
 }
 
-class write_wav;
+class wav_file;
 
-class spdif_rec_wav
+// spdif_rec_wav is helper class (prohibited to instantiate)
+class spdif_rec_wav final
 {
 public:
     // === Public definitions of class ===
@@ -31,15 +32,6 @@ public:
         WAV_CLOSE_FAIL,
         SUFFIX_FILE_FAIL
     };
-    /*
-    enum class wav_file_status_t {
-        RESET = 0,
-        REQ_PREPARE,
-        PREPARED,
-        REQ_FINALIZE,
-        FINALIZED
-    };
-    */
 
     // === Public class constants ===
 
@@ -66,7 +58,6 @@ public:
     // functions called from core0
 
     // === Public member variables ===
-    write_wav* inst;
 
 protected:
     // === Private definitions of class ===
@@ -96,8 +87,8 @@ protected:
     } sub_frame_buf_info_t;
 
     // === Private class constants ===
-    static constexpr int NUM_CHANNELS = write_wav::NUM_CHANNELS;
-    static constexpr int NUM_SUB_FRAME_BUF = write_wav::NUM_SUB_FRAME_BUF;
+    static constexpr int NUM_CHANNELS = wav_file::NUM_CHANNELS;
+    static constexpr int NUM_SUB_FRAME_BUF = wav_file::NUM_SUB_FRAME_BUF;
     static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
     static constexpr int RECORD_CMD_QUEUE_LENGTH = 2;
     static constexpr int ERROR_QUEUE_LENGTH = 10;
@@ -131,8 +122,9 @@ protected:
     static queue_t _record_cmd_queue;
     static queue_t _error_queue;
 
-    // === Constructor and Destructor (Private use) ===
-    // called from core0
+    // === Constructor and Destructor (Prohibit) ===
+    spdif_rec_wav() = delete;
+    ~spdif_rec_wav() = delete;
 
     // === Private member functions ===
     // functions called from core0

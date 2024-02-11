@@ -7,13 +7,13 @@
 #pragma once
 
 #include "pico/util/queue.h"
-#include "write_wav.h"
+#include "wav_file.h"
 
 class wav_file_status
 {
 public:
     // === Public definitions of class ===
-    enum class wav_file_status_t {
+    enum class status_t {
         RESET = 0,
         REQ_PREPARE,
         PREPARED,
@@ -35,17 +35,17 @@ public:
 
     // === Constructor and Destructor ===
     // called from core0
-    wav_file_status(wav_file_status_t status = wav_file_status_t::RESET);
+    wav_file_status(status_t status = status_t::RESET);
     virtual ~wav_file_status();
 
     // === Public member functions ===
     // functions called from core0
     void reset();
-    void prepare(const std::string filename, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
+    void prepare(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     void finalize(const bool report_flag, const float truncate_sec = 0.0f);
-    void set_status(wav_file_status_t status);
-    bool is_status(wav_file_status_t status);
-    void wait_status(wav_file_status_t status);
+    void set_status(status_t status);
+    bool is_status(status_t status);
+    void wait_status(status_t status);
     // functions called from core1
     void req_prepare(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     void req_finalize(const bool report_flag, const float truncate_sec = 0.0f);
@@ -74,6 +74,6 @@ protected:
     // functions called from core0
 
     // === Private member variables ===
-    write_wav* _write_wav;
-    wav_file_status_t _status;
+    wav_file* _wav_file;
+    status_t _status;
 };

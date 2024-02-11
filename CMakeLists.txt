@@ -22,7 +22,7 @@ add_executable(${PROJECT_NAME}
     src/spdif_rec_wav.cpp
     src/wav_file_status.cpp
     src/wav_file_cmd.cpp
-    src/write_wav.cpp
+    src/wav_file.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}

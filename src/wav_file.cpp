@@ -4,8 +4,9 @@
 / refer to https://opensource.org/licenses/BSD-2-Clause
 /------------------------------------------------------*/
 
-#include "write_wav.h"
+#include "wav_file.h"
 
+#include <string>
 #include <cstring>
 #include <cmath>
 
@@ -33,7 +34,7 @@ static inline void _drain_core0_grant()
 /*-----------------/
 /  Class variables
 /-----------------*/
-uint32_t write_wav::_wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
+uint32_t wav_file::_wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
 
 /*------------------------/
 /  Public class functions
@@ -42,9 +43,9 @@ uint32_t write_wav::_wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
 /*-----------------/
 /  Constructor
 /-----------------*/
-write_wav::write_wav(const std::string filename, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample) :
+wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample) :
     _fil(),
-    _filename(filename),
+    _filename(),
     _sample_freq(sample_freq),
     _bits_per_sample(bits_per_sample),
     _total_bytes(0),
@@ -55,6 +56,10 @@ write_wav::write_wav(const std::string filename, const uint32_t sample_freq, con
     _data_written(false),
     _truncate_sec(0.0f)
 {
+    char wav_filename[16];
+    sprintf(wav_filename, "%s%03d.wav", WAV_PREFIX, suffix);
+    _filename = std::string(wav_filename);
+
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
         UINT bw;
@@ -119,7 +124,7 @@ write_wav::write_wav(const std::string filename, const uint32_t sample_freq, con
 /*-----------------/
 /  Destructor
 /-----------------*/
-write_wav::~write_wav()
+wav_file::~wav_file()
 {
     _drain_core0_grant();
     for ( ; ; ) {
@@ -198,7 +203,7 @@ write_wav::~write_wav()
 /*--------------------------/
 /  Public Member functions
 /--------------------------*/
-uint32_t write_wav::write(const uint32_t* buff, const uint32_t sub_frame_count)
+uint32_t wav_file::write(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     uint64_t start_time = _micros();
     uint32_t bytes = _write_core(buff, sub_frame_count);
@@ -224,22 +229,22 @@ uint32_t write_wav::write(const uint32_t* buff, const uint32_t sub_frame_count)
     return bytes;
 }
 
-void write_wav::set_truncate(const float sec)
+void wav_file::set_truncate(const float sec)
 {
     _truncate_sec = sec;
 }
 
-void write_wav::record_queue_ratio(float queue_ratio)
+void wav_file::record_queue_ratio(float queue_ratio)
 {
     if (queue_ratio > _worst_queue_ratio) _worst_queue_ratio = queue_ratio;
 }
 
-void write_wav::report_start()
+void wav_file::report_start()
 {
     spdif_rec_wav::_log_printf("recording start \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", _filename.c_str(), _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3);
 }
 
-void write_wav::report_final()
+void wav_file::report_final()
 {
     float total_sec_f = static_cast<float>(_total_bytes) / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS / _sample_freq - _truncate_sec;
     uint32_t total_sec = static_cast<uint32_t>(total_sec_f);
@@ -261,7 +266,7 @@ void write_wav::report_final()
     }
 }
 
-bool write_wav::is_data_written()
+bool wav_file::is_data_written()
 {
     return _data_written;
 }
@@ -273,7 +278,7 @@ bool write_wav::is_data_written()
 /*-----------------------------/
 /  Protected Member functions
 /-----------------------------*/
-FRESULT write_wav::_stepwise_seek(DWORD target_pos)
+FRESULT wav_file::_stepwise_seek(DWORD target_pos)
 {
     FRESULT fr;     /* FatFs return code */
 
@@ -301,7 +306,7 @@ FRESULT write_wav::_stepwise_seek(DWORD target_pos)
     return fr;
 }
 
-uint32_t write_wav::_write_core(const uint32_t* buff, const uint32_t sub_frame_count)
+uint32_t wav_file::_write_core(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     FRESULT fr;     /* FatFs return code */
     UINT bw;

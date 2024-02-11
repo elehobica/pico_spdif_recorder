@@ -7,7 +7,7 @@
 #pragma once
 
 #include "pico/util/queue.h"
-#include "write_wav.h"
+#include "wav_file.h"
 
 class wav_file_status;
 
@@ -30,8 +30,8 @@ protected:
 
 public:
     static void initialize();
-    static void req_prepare(wav_file_status& inst_w_sts, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
-    static void req_finalize(wav_file_status& inst_w_sts, const bool report_final, const float truncate_sec = 0.0f);
+    static void req_prepare(wav_file_status& wfs, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
+    static void req_finalize(wav_file_status& wfs, const bool report_final, const float truncate_sec = 0.0f);
     static wav_file_cmd* parse(wav_file_cmd_data_t& cmd_data);
     static void process_wav_file_cmd();
     static void process_file_reply_cmd();

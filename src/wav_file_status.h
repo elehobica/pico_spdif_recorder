@@ -27,9 +27,9 @@ public:
     // === Public class functions ===
     // functions called from core0
     static void set_wait_grant_func(void (*func)());
-    static void _blocking_wait_core0_grant();
-    static void _drain_core0_grant();
-    static void _send_core0_grant();
+    static void blocking_wait_core0_grant();
+    static void drain_core0_grant();
+    static void send_core0_grant();
     // functions called from core1
     static void initialize();
     // functions called from core0 and core1

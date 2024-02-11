@@ -12,6 +12,9 @@
 
 class wav_file_status;
 
+/*--------------------------/
+/  WAV file command class
+/--------------------------*/
 class wav_file_cmd
 {
 protected:
@@ -36,16 +39,21 @@ public:
     static wav_file_cmd* parse(wav_file_cmd_data_t& cmd_data);
     static void process_wav_file_cmd();
     static void process_file_reply_cmd();
-    static bool reply_wav_file_cmd(wav_file_cmd_data_t& cmd_data);
 
+protected:
+    static bool _reply_wav_file_cmd(wav_file_cmd_data_t& cmd_data);
+
+public:
     wav_file_cmd(wav_file_cmd_data_t& cmd_data);
     virtual ~wav_file_cmd();
     virtual bool execute() = 0;
 
-protected:
     wav_file_cmd_data_t _cmd_data;
 };
 
+/*--------------------------/
+/  nop command
+/--------------------------*/
 class nop : public wav_file_cmd
 {
 public:
@@ -53,6 +61,9 @@ public:
     bool execute();
 };
 
+/*--------------------------/
+/  prepare command
+/--------------------------*/
 class prepare : public wav_file_cmd
 {
 public:
@@ -60,6 +71,9 @@ public:
     bool execute();
 };
 
+/*--------------------------/
+/  finalize command
+/--------------------------*/
 class finalize : public wav_file_cmd
 {
 public:

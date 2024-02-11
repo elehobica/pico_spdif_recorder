@@ -11,6 +11,9 @@
 queue_t wav_file_cmd::_wav_file_cmd_queue;
 queue_t wav_file_cmd::_wav_file_cmd_reply_queue;
 
+/*--------------------------/
+/  WAV file command class
+/--------------------------*/
 void wav_file_cmd::initialize()
 {
     queue_init(&_wav_file_cmd_queue, sizeof(wav_file_cmd_data_t), WAV_FILE_CMD_QUEUE_LENGTH);
@@ -28,7 +31,7 @@ void wav_file_cmd::req_prepare(wav_file_status& wfs, const uint32_t suffix, cons
     if (queue_try_add(&_wav_file_cmd_queue, &cmd_data)) {
         wfs.set_status(wav_file_status::status_t::REQ_PREPARE);
     } else {
-        spdif_rec_wav::_report_error(spdif_rec_wav::error_type_t::WAV_FILE_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
+        spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_FILE_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
     }
 }
 
@@ -43,7 +46,7 @@ void wav_file_cmd::req_finalize(wav_file_status& wfs, const bool report_flag, co
     if (queue_try_add(&_wav_file_cmd_queue, &cmd_data)) {
         wfs.set_status(wav_file_status::status_t::REQ_FINALIZE);
     } else {
-        spdif_rec_wav::_report_error(spdif_rec_wav::error_type_t::WAV_FILE_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
+        spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_FILE_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
     }
 }
 
@@ -85,10 +88,10 @@ void wav_file_cmd::process_file_reply_cmd()
     }
 }
 
-bool wav_file_cmd::reply_wav_file_cmd(wav_file_cmd_data_t& cmd_data)
+bool wav_file_cmd::_reply_wav_file_cmd(wav_file_cmd_data_t& cmd_data)
 {
     if (!queue_try_add(&_wav_file_cmd_reply_queue, &cmd_data)) {
-        spdif_rec_wav::_report_error(spdif_rec_wav::error_type_t::WAV_FILE_CMD_REPLY_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
+        spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_FILE_CMD_REPLY_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
         return false;
     }
     return true;
@@ -103,6 +106,9 @@ wav_file_cmd::~wav_file_cmd()
 {
 }
 
+/*--------------------------/
+/  nop command
+/--------------------------*/
 nop::nop(wav_file_cmd_data_t& cmd_data) :
     wav_file_cmd(cmd_data)
 {
@@ -113,6 +119,9 @@ bool nop::execute()
     return true;
 }
 
+/*--------------------------/
+/  prepare command
+/--------------------------*/
 prepare::prepare(wav_file_cmd_data_t& cmd_data) :
     wav_file_cmd(cmd_data)
 {
@@ -129,9 +138,12 @@ bool prepare::execute()
     _cmd_data.param[1] = 0L;
     _cmd_data.param[2] = 0L;
     _cmd_data.param[3] = 0L;
-    return reply_wav_file_cmd(_cmd_data);
+    return _reply_wav_file_cmd(_cmd_data);
 }
 
+/*--------------------------/
+/  finalize command
+/--------------------------*/
 finalize::finalize(wav_file_cmd_data_t& cmd_data) :
     wav_file_cmd(cmd_data)
 {
@@ -147,5 +159,5 @@ bool finalize::execute()
     _cmd_data.param[1] = 0L;
     _cmd_data.param[2] = 0L;
     _cmd_data.param[3] = 0L;
-    return reply_wav_file_cmd(_cmd_data);
+    return _reply_wav_file_cmd(_cmd_data);
 }

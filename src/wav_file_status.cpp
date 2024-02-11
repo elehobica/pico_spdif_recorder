@@ -17,9 +17,9 @@ void wav_file_status::set_wait_grant_func(void (*func)())
     _wait_grant_func = func;
 }
 
-void wav_file_status::_blocking_wait_core0_grant()
+void wav_file_status::blocking_wait_core0_grant()
 {
-    _drain_core0_grant();
+    drain_core0_grant();
     while (queue_is_empty(&_core0_grant_queue)) {
         if (_wait_grant_func != nullptr) {
             (*_wait_grant_func)();
@@ -27,7 +27,7 @@ void wav_file_status::_blocking_wait_core0_grant()
     }
 }
 
-void wav_file_status::_drain_core0_grant()
+void wav_file_status::drain_core0_grant()
 {
     while (!queue_is_empty(&_core0_grant_queue)) {
         bool flag;
@@ -35,7 +35,7 @@ void wav_file_status::_drain_core0_grant()
     }
 }
 
-void wav_file_status::_send_core0_grant()
+void wav_file_status::send_core0_grant()
 {
     bool flag = true;
     queue_try_add(&_core0_grant_queue, &flag);
@@ -88,7 +88,7 @@ bool wav_file_status::is_status(status_t status)
 void wav_file_status::wait_status(status_t status)
 {
     while (_status != status) {
-        _send_core0_grant();
+        send_core0_grant();
         wav_file_cmd::process_file_reply_cmd();
     }
 }

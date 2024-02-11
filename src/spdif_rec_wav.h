@@ -60,8 +60,8 @@ public:
     static void start_recording(const bits_per_sample_t bits_per_sample, const bool standby = false);
     static void end_recording(const bool immediate_split = false, const float truncate_sec = 0.0f);
     static void split_recording(const bits_per_sample_t bits_per_sample);
-    static void _report_error(const error_type_t type, const uint32_t param = 0L);
-    static void _log_printf(const char* fmt, ...);
+    static void report_error(const error_type_t type, const uint32_t param = 0L);
+    static void log_printf(const char* fmt, ...);
 
     // === Public member functions ===
     // functions called from core0
@@ -96,10 +96,6 @@ protected:
     } sub_frame_buf_info_t;
 
     // === Private class constants ===
-    /*
-    static constexpr int NUM_CHANNELS = wav_file::NUM_CHANNELS;
-    static constexpr int NUM_SUB_FRAME_BUF = wav_file::NUM_SUB_FRAME_BUF;
-    */
     static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
     static constexpr int RECORD_CMD_QUEUE_LENGTH = 2;
     static constexpr int ERROR_QUEUE_LENGTH = 10;

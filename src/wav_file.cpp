@@ -22,14 +22,17 @@ static inline uint64_t _micros()
 
 static inline void _blocking_wait_core0_grant()
 {
-    wav_file_status::_blocking_wait_core0_grant();
+    wav_file_status::blocking_wait_core0_grant();
 }
 
 static inline void _drain_core0_grant()
 {
-    wav_file_status::_drain_core0_grant();
+    wav_file_status::drain_core0_grant();
 }
 
+/*----------------------------------------/
+/  FATFS wrappers for waiting core0 grant
+/----------------------------------------*/
 static inline FRESULT _wrap_f_open(FIL* fp, const TCHAR* path, BYTE mode)
 {
     _blocking_wait_core0_grant();
@@ -180,7 +183,7 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
         return;
     }
 
-    spdif_rec_wav::_report_error(spdif_rec_wav::error_type_t::WAV_OPEN_FAIL);
+    spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_OPEN_FAIL);
 }
 
 /*-----------------/
@@ -244,7 +247,7 @@ wav_file::~wav_file()
         return;
     }
 
-    spdif_rec_wav::_report_error(spdif_rec_wav::error_type_t::WAV_OPEN_FAIL);
+    spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_OPEN_FAIL);
 }
 
 /*--------------------------/
@@ -270,7 +273,7 @@ uint32_t wav_file::write(const uint32_t* buff, const uint32_t sub_frame_count)
     // force immidiate split to avoid 32bit file size overflow
     if (_total_bytes > MAX_TOTAL_BYTES) {
         spdif_rec_wav::split_recording(_bits_per_sample);
-        spdif_rec_wav::_log_printf("force immediate wav split due to file size\r\n");
+        spdif_rec_wav::log_printf("force immediate wav split due to file size\r\n");
     }
 
     return bytes;
@@ -288,7 +291,7 @@ void wav_file::record_queue_ratio(float queue_ratio)
 
 void wav_file::report_start()
 {
-    spdif_rec_wav::_log_printf("recording start \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", _filename.c_str(), _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3);
+    spdif_rec_wav::log_printf("recording start \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", _filename.c_str(), _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3);
 }
 
 void wav_file::report_final()
@@ -296,11 +299,7 @@ void wav_file::report_final()
     float total_sec_f = static_cast<float>(_total_bytes) / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS / _sample_freq - _truncate_sec;
     uint32_t total_sec = static_cast<uint32_t>(total_sec_f);
     uint32_t total_sec_dp = static_cast<uint32_t>((total_sec_f - total_sec) * 1e3);
-    /*
-    uint32_t total_sec = _total_bytes / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS / _sample_freq;
-    uint32_t total_sec_dp = static_cast<uint64_t>(_total_bytes) / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS * 1000 / _sample_freq - total_sec*1000;
-    */
-    spdif_rec_wav::_log_printf("recording done \"%s\" %lu bytes (time:  %d:%02d.%03d)\r\n", _filename.c_str(), _total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
+    spdif_rec_wav::log_printf("recording done \"%s\" %lu bytes (time:  %d:%02d.%03d)\r\n", _filename.c_str(), _total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
     if (spdif_rec_wav::get_verbose()) {
         float avg_bw = static_cast<float>(_total_bytes) / _total_time_us * 1e3;
         printf("SD Card writing bandwidth\r\n");
@@ -364,7 +363,7 @@ uint32_t wav_file::_write_core(const uint32_t* buff, const uint32_t sub_frame_co
         }
         fr = _wrap_f_write_priority(&_fil, static_cast<const void *>(_wav_buf), sub_frame_count*2, &bw);
         if (fr != FR_OK || bw != sub_frame_count*2) {
-            spdif_rec_wav::_report_error(spdif_rec_wav::error_type_t::WAV_DATA_WRITE_FAIL);
+            spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_DATA_WRITE_FAIL);
         }
     } else if (_bits_per_sample == bits_per_sample_t::_24BITS) {
         for (int i = 0, j = 0; i < sub_frame_count; i += 4, j += 3) {
@@ -374,7 +373,7 @@ uint32_t wav_file::_write_core(const uint32_t* buff, const uint32_t sub_frame_co
         }
         fr = _wrap_f_write_priority(&_fil, static_cast<const void *>(_wav_buf), sub_frame_count*3, &bw);
         if (fr != FR_OK || bw != sub_frame_count*3) {
-            spdif_rec_wav::_report_error(spdif_rec_wav::error_type_t::WAV_DATA_WRITE_FAIL);
+            spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_DATA_WRITE_FAIL);
         }
     }
 
@@ -382,7 +381,7 @@ uint32_t wav_file::_write_core(const uint32_t* buff, const uint32_t sub_frame_co
     /*
     fr = _wrap_f_sync_priority(&_fil);
     if (fr != FR_OK) {
-        spdif_rec_wav::_report_error(spdif_rec_wav::error_type_t::WAV_DATA_SYNC_FAIL);
+        spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_DATA_SYNC_FAIL);
     }
     */
 

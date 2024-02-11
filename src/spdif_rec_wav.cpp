@@ -242,7 +242,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                         // prepare next file
                         next.req_prepare(_suffix + 1, sample_freq, bits_per_sample);
                     }
-                    wav_file_status::_send_core0_grant();
+                    wav_file_status::send_core0_grant();
                 }
 
                 wav_file_cmd::process_file_reply_cmd();
@@ -289,7 +289,7 @@ void spdif_rec_wav::start_recording(const bits_per_sample_t bits_per_sample, con
     cmd_data.param[0] = static_cast<uint32_t>(spdif_rx_get_samp_freq());
     cmd_data.param[1] = static_cast<uint32_t>(bits_per_sample);
     if (!queue_try_add(&_record_cmd_queue, &cmd_data)) {
-        _report_error(error_type_t::RECORD_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
+        report_error(error_type_t::RECORD_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
     }
 }
 
@@ -300,7 +300,7 @@ void spdif_rec_wav::end_recording(const bool immediate_split, const float trunca
     cmd_data.param[0] = *(reinterpret_cast<const uint32_t*>(&truncate_sec));
     cmd_data.param[1] = 0L;
     if (!queue_try_add(&_record_cmd_queue, &cmd_data)) {
-        _report_error(error_type_t::RECORD_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
+        report_error(error_type_t::RECORD_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
     }
 }
 
@@ -320,45 +320,45 @@ void spdif_rec_wav::_process_error()
         queue_remove_blocking(&_error_queue, &packet);
         switch (packet.type) {
         case error_type_t::ILLEGAL_SUB_FRAME_COUNT:
-            _log_printf("ERROR: illegal sub_frame_count\r\n");
+            log_printf("ERROR: illegal sub_frame_count\r\n");
             break;
         case error_type_t::SPDIF_QUEUE_FULL: {
             int error_count = static_cast<int>(packet.param);
-            _log_printf("ERROR: _spdif_queue is full x%d\r\n", error_count);
+            log_printf("ERROR: _spdif_queue is full x%d\r\n", error_count);
             break;
         }
         case error_type_t::WAV_FILE_CMD_QUEUE_FULL:
-            _log_printf("ERROR: _wav_file_cmd_queue is full (cmd=%d)\r\n", static_cast<int>(packet.param));
+            log_printf("ERROR: _wav_file_cmd_queue is full (cmd=%d)\r\n", static_cast<int>(packet.param));
             break;
         case error_type_t::WAV_FILE_CMD_REPLY_QUEUE_FULL:
-            _log_printf("ERROR: _wav_file_cmd_reply_queue is full (cmd=%d)\r\n", static_cast<int>(packet.param));
+            log_printf("ERROR: _wav_file_cmd_reply_queue is full (cmd=%d)\r\n", static_cast<int>(packet.param));
             break;
         case error_type_t::RECORD_CMD_QUEUE_FULL:
-            _log_printf("ERROR: _record_cmd_queue is full (cmd=%d)\r\n", static_cast<int>(packet.param));
+            log_printf("ERROR: _record_cmd_queue is full (cmd=%d)\r\n", static_cast<int>(packet.param));
             break;
         case error_type_t::WAV_OPEN_FAIL:
-            _log_printf("ERROR: wav file open failed\r\n");
+            log_printf("ERROR: wav file open failed\r\n");
             break;
         case error_type_t::WAV_DATA_WRITE_FAIL:
-            _log_printf("ERROR: wav data write failed\r\n");
+            log_printf("ERROR: wav data write failed\r\n");
             break;
         case error_type_t::WAV_DATA_SYNC_FAIL:
-            _log_printf("ERROR: wav data sync failed\r\n");
+            log_printf("ERROR: wav data sync failed\r\n");
             break;
         case error_type_t::WAV_CLOSE_FAIL:
-            _log_printf("ERROR: wav file close failed\r\n");
+            log_printf("ERROR: wav file close failed\r\n");
             break;
         case error_type_t::SUFFIX_FILE_FAIL:
-            _log_printf("ERROR: suffix file failed\r\n");
+            log_printf("ERROR: suffix file failed\r\n");
             break;
         default:
-            _log_printf("ERROR: unknown error\r\n");
+            log_printf("ERROR: unknown error\r\n");
             break;
         }
     }
 }
 
-void spdif_rec_wav::_report_error(const error_type_t type, const uint32_t param)
+void spdif_rec_wav::report_error(const error_type_t type, const uint32_t param)
 {
     error_packet_t packet;
     packet.type = type;
@@ -368,7 +368,7 @@ void spdif_rec_wav::_report_error(const error_type_t type, const uint32_t param)
     }
 }
 
-void spdif_rec_wav::_log_printf(const char* fmt, ...)
+void spdif_rec_wav::log_printf(const char* fmt, ...)
 {
     char buff[512];
     va_list va;
@@ -412,14 +412,14 @@ void spdif_rec_wav::_log_printf(const char* fmt, ...)
 void spdif_rec_wav::_push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     // note that reporting errors through _error_queue is mandatory
-    //   because _log_printf includes file access and mutex from IRQ routine like this function locks whole system.
+    //   because log_printf includes file access and mutex from IRQ routine like this function locks whole system.
 
     static int error_count = 0;
 
     if (!_standby_flag && !_recording_flag) return;
 
     if (sub_frame_count != SPDIF_BLOCK_SIZE) {
-        _report_error(error_type_t::ILLEGAL_SUB_FRAME_COUNT);
+        report_error(error_type_t::ILLEGAL_SUB_FRAME_COUNT);
         return;
     }
 
@@ -428,13 +428,13 @@ void spdif_rec_wav::_push_sub_frame_buf(const uint32_t* buff, const uint32_t sub
     if (queue_try_add(&_spdif_queue, &buf_info)) {
         _sub_frame_buf_id = (_sub_frame_buf_id + 1) % NUM_SUB_FRAME_BUF;
         if (error_count > 0) {
-            _report_error(error_type_t::SPDIF_QUEUE_FULL, error_count);
+            report_error(error_type_t::SPDIF_QUEUE_FULL, error_count);
         }
         error_count = 0;
     } else {
         error_count++;
         if (error_count >= 1000) {
-            _report_error(error_type_t::SPDIF_QUEUE_FULL, error_count);
+            report_error(error_type_t::SPDIF_QUEUE_FULL, error_count);
             error_count -= 1000;
         }
     }
@@ -480,7 +480,7 @@ void spdif_rec_wav::_set_last_suffix(int suffix)
         return;
     }
 
-    _report_error(error_type_t::SUFFIX_FILE_FAIL);
+    report_error(error_type_t::SUFFIX_FILE_FAIL);
 }
 
 spdif_rec_wav::blank_status_t spdif_rec_wav::_scan_blank(const uint32_t* buff, const uint32_t sub_frame_count, const uint32_t sample_freq)

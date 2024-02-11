@@ -39,6 +39,7 @@ bool           spdif_rec_wav::_clear_log;
 uint32_t       spdif_rec_wav::_sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
 int            spdif_rec_wav::_sub_frame_buf_id = 0;
 float          spdif_rec_wav::_blank_sec = 0.0f;
+float          spdif_rec_wav::_severe_blank_sec = 0.0f;
 float          spdif_rec_wav::_blank_scan_sec = 0.0f;
 bool           spdif_rec_wav::_standby_flag = false;
 bool           spdif_rec_wav::_recording_flag = false;
@@ -495,15 +496,21 @@ spdif_rec_wav::blank_status_t spdif_rec_wav::_scan_blank(const uint32_t* buff, c
     float time_sec = static_cast<float>(sub_frame_count) / NUM_CHANNELS / sample_freq;
 
     uint32_t ave_level = data_accum / sub_frame_count;
-    if (ave_level < BLANK_LEVEL) {
-        status = (_blank_sec > BLANK_SKIP_SEC) ? blank_status_t::BLANK_SKIP : blank_status_t::BLANK_DETECTED;
+    if (ave_level < SEVERE_BLANK_LEVEL) {
+        status = (_severe_blank_sec > BLANK_SKIP_SEC) ? blank_status_t::BLANK_SKIP : blank_status_t::BLANK_DETECTED;
         _blank_sec += time_sec;
+        _severe_blank_sec += time_sec;
+    } else if (ave_level < BLANK_LEVEL) {
+        status = blank_status_t::BLANK_DETECTED;
+        _blank_sec += time_sec;
+        _severe_blank_sec = 0.0f;
     } else {
         if (_blank_scan_sec >= BLANK_REPEAT_PROHIBIT_SEC && _blank_sec > BLANK_SEC) {
             if (_verbose) printf("detected blank end\r\n");
             status = blank_status_t::BLANK_END_DETECTED;
         }
         _blank_sec = 0.0f;
+        _severe_blank_sec = 0.0f;
     }
     _blank_scan_sec += time_sec;
 

@@ -100,6 +100,7 @@ protected:
     static constexpr int RECORD_CMD_QUEUE_LENGTH = 2;
     static constexpr int ERROR_QUEUE_LENGTH = 10;
     static constexpr int BLANK_LEVEL = 16;  // level to detect blank supposing 16bit data
+    static constexpr int SEVERE_BLANK_LEVEL = 4;  // severe level to detect blank SKIP supposing 16bit data
     static constexpr float BLANK_SEC = 0.5;  // the seconds to detect the blank
     static constexpr float BLANK_REPEAT_PROHIBIT_SEC = 10.0;  // the seconds within which detecting blank is prohibited
     static constexpr float BLANK_SKIP_SEC = 10.0;  // skip recording if blank time is longer than this seconds
@@ -120,6 +121,7 @@ protected:
     static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
     static int _sub_frame_buf_id;
     static float _blank_sec;
+    static float _severe_blank_sec;
     static float _blank_scan_sec;
     static bool _standby_flag;
     static bool _recording_flag;

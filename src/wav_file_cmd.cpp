@@ -6,9 +6,7 @@
 
 #include "wav_file_cmd.h"
 
-#include "spdif_rec_wav.h"
 #include "wav_file_status.h"
-#include "wav_file.h"
 
 queue_t wav_file_cmd::_wav_file_cmd_queue;
 queue_t wav_file_cmd::_wav_file_cmd_reply_queue;

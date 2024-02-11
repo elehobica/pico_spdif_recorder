@@ -12,10 +12,8 @@
 #include "pico/util/queue.h"
 
 #include "spdif_rx.h"
-#include "spdif_rec_wav.h"
-#include "wav_file_status.h"
-#include "wav_file_cmd.h"
 #include "tf_card.h"
+#include "spdif_rec_wav.h"
 
 static constexpr uint PIN_LED = PICO_DEFAULT_LED_PIN;
 
@@ -266,7 +264,7 @@ int main()
         return 0;
     }
 
-    wav_file_status::set_wait_grant_func(wait_led_blink);
+    spdif_rec_wav::set_wait_grant_func(wait_led_blink);
     // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
     multicore_launch_core1(spdif_rec_wav_record_process_loop);
@@ -369,7 +367,7 @@ int main()
         }
 
         // background file process on core0
-        wav_file_cmd::process_wav_file_cmd();
+        spdif_rec_wav::process_wav_file_cmd();
 
         tight_loop_contents();
         sleep_ms(10);

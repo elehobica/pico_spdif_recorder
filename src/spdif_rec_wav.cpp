@@ -51,6 +51,11 @@ queue_t        spdif_rec_wav::_error_queue;
 /*------------------------/
 /  Public class functions
 /------------------------*/
+void spdif_rec_wav::set_wait_grant_func(void (*func)())
+{
+    wav_file_status::set_wait_grant_func(func);
+}
+
 bool spdif_rec_wav::is_standby()
 {
     return _standby_flag;
@@ -90,6 +95,11 @@ void spdif_rec_wav::clear_suffix()
 {
     _suffix = 1;
     _clear_log = true;
+}
+
+void spdif_rec_wav::process_wav_file_cmd()
+{
+    wav_file_cmd::process_wav_file_cmd();
 }
 
 void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suffix_info_filename)

@@ -8,22 +8,13 @@
 
 #include <string>
 
-#include "spdif_rx.h"
 #include "fatfs/ff.h"
-
-// === Global definitions ===
-enum class bits_per_sample_t {
-    _16BITS = 16,
-    _24BITS = 24,
-};
+#include "spdif_rec_wav.h"
 
 class wav_file
 {
 public:
     // === Public class constants ===
-    static constexpr int NUM_CHANNELS = 2;
-    static constexpr int NUM_SUB_FRAME_BUF = 96; // maximize buffers to the limit for the margin of writing latency as much as possible
-    static constexpr const char* WAV_PREFIX = "record_";
 
     // === Public class functions ===
     // functions called from core0
@@ -44,6 +35,9 @@ public:
 
 protected:
     // === Private class constants ===
+    static constexpr int NUM_CHANNELS = spdif_rec_wav::NUM_CHANNELS;
+    static constexpr int NUM_SUB_FRAME_BUF = spdif_rec_wav::NUM_SUB_FRAME_BUF;
+    static constexpr const char* WAV_PREFIX = "record_";
     static constexpr int WAV_HEADER_SIZE = 44;
     static constexpr uint32_t MAX_TOTAL_BYTES = 0xfff00000;  // max total bytes of wav data to avoid 32bit overflow
     static constexpr uint32_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB

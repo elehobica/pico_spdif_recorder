@@ -7,13 +7,18 @@
 #pragma once
 
 #include "pico/util/queue.h"
-#include "wav_file.h"
+
+#include "spdif_rx.h"
 
 extern "C" {
 void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err);
 }
 
-class wav_file;
+// === Global definitions ===
+enum class bits_per_sample_t {
+    _16BITS = 16,
+    _24BITS = 24,
+};
 
 // spdif_rec_wav is helper class (prohibited to instantiate)
 class spdif_rec_wav final
@@ -34,9 +39,12 @@ public:
     };
 
     // === Public class constants ===
+    static constexpr int NUM_CHANNELS = 2;
+    static constexpr int NUM_SUB_FRAME_BUF = 96; // maximize buffers to the limit for the margin of writing latency as much as possible
 
     // === Public class functions ===
     // functions called from core0
+    static void set_wait_grant_func(void (*func)());
     static bool is_standby();
     static bool is_recording();
     static void set_blank_split(const bool flag);
@@ -45,6 +53,7 @@ public:
     static bool get_verbose();
     static int get_suffix();
     static void clear_suffix();
+    static void process_wav_file_cmd();
     // functions called from core1
     static void record_process_loop(const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
     // functions called from core0 and core1
@@ -87,8 +96,10 @@ protected:
     } sub_frame_buf_info_t;
 
     // === Private class constants ===
+    /*
     static constexpr int NUM_CHANNELS = wav_file::NUM_CHANNELS;
     static constexpr int NUM_SUB_FRAME_BUF = wav_file::NUM_SUB_FRAME_BUF;
+    */
     static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
     static constexpr int RECORD_CMD_QUEUE_LENGTH = 2;
     static constexpr int ERROR_QUEUE_LENGTH = 10;
@@ -133,4 +144,3 @@ protected:
 
     friend void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err);
 };
-

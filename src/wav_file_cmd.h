@@ -7,7 +7,8 @@
 #pragma once
 
 #include "pico/util/queue.h"
-#include "wav_file.h"
+
+#include "spdif_rec_wav.h"
 
 class wav_file_status;
 

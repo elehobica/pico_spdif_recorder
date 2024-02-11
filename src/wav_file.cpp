@@ -10,7 +10,6 @@
 #include <cstring>
 #include <cmath>
 
-#include "spdif_rec_wav.h"
 #include "wav_file_status.h"
 
 /*-----------------/

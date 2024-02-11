@@ -29,7 +29,8 @@ void wav_file_status::blocking_wait_core0_grant()
 
 void wav_file_status::drain_core0_grant()
 {
-    while (!queue_is_empty(&_core0_grant_queue)) {
+    uint queue_level = queue_get_level(&_core0_grant_queue);
+    for (uint i = 0; i < queue_level; i++) {
         bool flag;
         queue_remove_blocking(&_core0_grant_queue, &flag);
     }

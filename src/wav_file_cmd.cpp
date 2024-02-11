@@ -6,10 +6,13 @@
 
 #include "wav_file_cmd.h"
 
-#include "wav_file_status.h"
-
 queue_t wav_file_cmd::_wav_file_cmd_queue;
 queue_t wav_file_cmd::_wav_file_cmd_reply_queue;
+// relation from wav_file_cmd_type_t tp status_t
+const std::map<const wav_file_cmd::wav_file_cmd_type_t, const wav_file_status::status_t> wav_file_cmd::_cmd_to_status = {
+    {wav_file_cmd::wav_file_cmd_type_t::PREPARE,  wav_file_status::status_t::REQ_PREPARE},
+    {wav_file_cmd::wav_file_cmd_type_t::FINALIZE, wav_file_status::status_t::REQ_FINALIZE}
+};
 
 /*--------------------------/
 /  WAV file command class
@@ -20,7 +23,7 @@ void wav_file_cmd::initialize()
     queue_init(&_wav_file_cmd_reply_queue, sizeof(wav_file_cmd_data_t), WAV_FILE_CMD_QUEUE_LENGTH);
 }
 
-void wav_file_cmd::req_prepare(wav_file_status& wfs, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample)
+bool wav_file_cmd::req_prepare(wav_file_status& wfs, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample)
 {
     wav_file_cmd_data_t cmd_data;
     cmd_data.cmd = wav_file_cmd_type_t::PREPARE;
@@ -28,14 +31,10 @@ void wav_file_cmd::req_prepare(wav_file_status& wfs, const uint32_t suffix, cons
     cmd_data.param[1] = suffix;
     cmd_data.param[2] = sample_freq;
     cmd_data.param[3] = static_cast<uint32_t>(bits_per_sample);
-    if (queue_try_add(&_wav_file_cmd_queue, &cmd_data)) {
-        wfs.set_status(wav_file_status::status_t::REQ_PREPARE);
-    } else {
-        spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_FILE_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
-    }
+    return _req_wav_file_cmd(cmd_data);
 }
 
-void wav_file_cmd::req_finalize(wav_file_status& wfs, const bool report_flag, const float truncate_sec)
+bool wav_file_cmd::req_finalize(wav_file_status& wfs, const bool report_flag, const float truncate_sec)
 {
     wav_file_cmd_data_t cmd_data;
     cmd_data.cmd = wav_file_cmd_type_t::FINALIZE;
@@ -43,35 +42,7 @@ void wav_file_cmd::req_finalize(wav_file_status& wfs, const bool report_flag, co
     cmd_data.param[1] = static_cast<uint32_t>(report_flag);
     cmd_data.param[2] = *(reinterpret_cast<const uint32_t*>(&truncate_sec));
     cmd_data.param[3] = 0L;
-    if (queue_try_add(&_wav_file_cmd_queue, &cmd_data)) {
-        wfs.set_status(wav_file_status::status_t::REQ_FINALIZE);
-    } else {
-        spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_FILE_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
-    }
-}
-
-wav_file_cmd* wav_file_cmd::parse(wav_file_cmd_data_t& cmd_data)
-{
-    wav_file_cmd* inst;
-    if (cmd_data.cmd == wav_file_cmd_type_t::PREPARE) {
-        inst = new prepare(cmd_data);
-    } else if (cmd_data.cmd == wav_file_cmd_type_t::FINALIZE) {
-        inst = new finalize(cmd_data);
-    } else {
-        inst = new nop(cmd_data);
-    }
-    return inst;
-}
-
-void wav_file_cmd::process_wav_file_cmd()
-{
-    while (!queue_is_empty(&_wav_file_cmd_queue)) {
-        wav_file_cmd_data_t cmd_data;
-        queue_remove_blocking(&_wav_file_cmd_queue, &cmd_data);
-        wav_file_cmd* cmd = parse(cmd_data);
-        cmd->execute();
-        delete cmd;
-    }
+    return _req_wav_file_cmd(cmd_data);
 }
 
 void wav_file_cmd::process_file_reply_cmd()
@@ -88,12 +59,48 @@ void wav_file_cmd::process_file_reply_cmd()
     }
 }
 
+void wav_file_cmd::process_wav_file_cmd()
+{
+    while (!queue_is_empty(&_wav_file_cmd_queue)) {
+        wav_file_cmd_data_t cmd_data;
+        queue_remove_blocking(&_wav_file_cmd_queue, &cmd_data);
+        wav_file_cmd* cmd = _parse(cmd_data);
+        cmd->execute();
+        delete cmd;
+    }
+}
+
+wav_file_cmd* wav_file_cmd::_parse(wav_file_cmd_data_t& cmd_data)
+{
+    wav_file_cmd* inst;
+    if (cmd_data.cmd == wav_file_cmd_type_t::PREPARE) {
+        inst = new prepare(cmd_data);
+    } else if (cmd_data.cmd == wav_file_cmd_type_t::FINALIZE) {
+        inst = new finalize(cmd_data);
+    } else {
+        inst = new nop(cmd_data);
+    }
+    return inst;
+}
+
 bool wav_file_cmd::_reply_wav_file_cmd(wav_file_cmd_data_t& cmd_data)
 {
     if (!queue_try_add(&_wav_file_cmd_reply_queue, &cmd_data)) {
         spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_FILE_CMD_REPLY_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
         return false;
     }
+    return true;
+}
+
+bool wav_file_cmd::_req_wav_file_cmd(wav_file_cmd_data_t& cmd_data)
+{
+    if (!queue_try_add(&_wav_file_cmd_queue, &cmd_data)) {
+        spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_FILE_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
+        return false;
+    }
+    wav_file_status* wfs = reinterpret_cast<wav_file_status*>(cmd_data.param[0]);
+    const wav_file_status::status_t status = _cmd_to_status.at(cmd_data.cmd);
+    wfs->set_status(status);
     return true;
 }
 

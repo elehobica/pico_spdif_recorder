@@ -510,14 +510,6 @@ spdif_rec_wav::blank_status_t spdif_rec_wav::_scan_blank(const uint32_t* buff, c
     return status;
 }
 
-/*-----------------/
-/  Constructor
-/-----------------*/
-
-/*-----------------/
-/  Destructor
-/-----------------*/
-
 /*--------------------------/
 /  Public Member functions
 /--------------------------*/

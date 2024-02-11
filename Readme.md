@@ -4,6 +4,7 @@
 * Hi-Res recorder from S/PDIF input to WAV files on microSD card
 * Bit resolution: 16bit or 24bit (2ch)
 * Sampling frequency: 44.1 KHz, 48.0 KHz, 88.2 KHz, 96.0 KHz (, 176.4 KHz, 192.0 KHz)
+* Recording only, no monitoring or playback functions
 
 ## Supported Board and Peripheral Devices
 * Raspberry Pi Pico (rp2040)

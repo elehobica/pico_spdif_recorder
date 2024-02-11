@@ -12,8 +12,8 @@
 #include "pico/util/queue.h"
 
 #include "spdif_rx.h"
-#include "spdif_rec_wav.h"
 #include "tf_card.h"
+#include "spdif_rec_wav.h"
 
 static constexpr uint PIN_LED = PICO_DEFAULT_LED_PIN;
 
@@ -98,7 +98,7 @@ void spdif_rec_wav_record_process_loop()
     core1_running = false;
 }
 
-void show_help(const spdif_rec_wav::bits_per_sample_t bits_per_sample)
+void show_help(const bits_per_sample_t bits_per_sample)
 {
     printf("---------------------------\r\n");
     printf(" bit resolution: %d bits\r\n", static_cast<int>(bits_per_sample));
@@ -168,7 +168,7 @@ bool timer_callback_scan_buttons(repeating_timer_t *rt)
     return true; // keep repeating
 }
 
-void toggle_start_stop(const spdif_rec_wav::bits_per_sample_t bits_per_sample, bool& wait_sync, bool& user_standy, bool& standby_repeat)
+void toggle_start_stop(const bits_per_sample_t bits_per_sample, bool& wait_sync, bool& user_standy, bool& standby_repeat)
 {
     if (spdif_rec_wav::is_standby()) {
         if (user_standy) {
@@ -205,12 +205,12 @@ void toggle_start_stop(const spdif_rec_wav::bits_per_sample_t bits_per_sample, b
     }
 }
 
-void toggle_bit_resolution(spdif_rec_wav::bits_per_sample_t& bits_per_sample)
+void toggle_bit_resolution(bits_per_sample_t& bits_per_sample)
 {
-    if (bits_per_sample == spdif_rec_wav::bits_per_sample_t::_16BITS) {
-        bits_per_sample = spdif_rec_wav::bits_per_sample_t::_24BITS;
+    if (bits_per_sample == bits_per_sample_t::_16BITS) {
+        bits_per_sample = bits_per_sample_t::_24BITS;
     } else {
-        bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
+        bits_per_sample = bits_per_sample_t::_16BITS;
     }
 }
 
@@ -220,7 +220,7 @@ int main()
     bool wait_sync = false;
     bool user_standy = false;
     bool standby_repeat = true;
-    spdif_rec_wav::bits_per_sample_t bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
+    bits_per_sample_t bits_per_sample = bits_per_sample_t::_16BITS;
     char c;
 
     stdio_init_all();
@@ -244,7 +244,7 @@ int main()
     gpio_init(PIN_SWITCH_24BIT);
     gpio_set_dir(PIN_SWITCH_24BIT, GPIO_IN);
     gpio_pull_up(PIN_SWITCH_24BIT);
-    bits_per_sample = gpio_get(PIN_SWITCH_24BIT) ? spdif_rec_wav::bits_per_sample_t::_16BITS : spdif_rec_wav::bits_per_sample_t::_24BITS;
+    bits_per_sample = gpio_get(PIN_SWITCH_24BIT) ? bits_per_sample_t::_16BITS : bits_per_sample_t::_24BITS;
 
     // spdif_rx initialize
     spdif_rx_init();
@@ -308,17 +308,17 @@ int main()
             if (event == signal_event_t::BUTTON_PUSHED) {
                 toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
             } else if (event == signal_event_t::SWITCH_ON) {
-                if (bits_per_sample != spdif_rec_wav::bits_per_sample_t::_24BITS) {
+                if (bits_per_sample != bits_per_sample_t::_24BITS) {
                     toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
-                    bits_per_sample = spdif_rec_wav::bits_per_sample_t::_24BITS;
+                    bits_per_sample = bits_per_sample_t::_24BITS;
                     sleep_ms(100);
                     toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
                 }
                 printf("bit resolution: %d bits\r\n", bits_per_sample);
             } else if (event == signal_event_t::SWITCH_OFF) {
-                if (bits_per_sample != spdif_rec_wav::bits_per_sample_t::_16BITS) {
+                if (bits_per_sample != bits_per_sample_t::_16BITS) {
                     toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
-                    bits_per_sample = spdif_rec_wav::bits_per_sample_t::_16BITS;
+                    bits_per_sample = bits_per_sample_t::_16BITS;
                     sleep_ms(100);
                     toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
                 }
@@ -367,7 +367,7 @@ int main()
         }
 
         // background file process on core0
-        spdif_rec_wav::process_file_cmd();
+        spdif_rec_wav::process_wav_file_cmd();
 
         tight_loop_contents();
         sleep_ms(10);

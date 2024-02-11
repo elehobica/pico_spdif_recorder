@@ -22,8 +22,8 @@ public:
     enum class error_type_t {
         SPDIF_QUEUE_FULL = 0,
         ILLEGAL_SUB_FRAME_COUNT,
-        FILE_CMD_QUEUE_FULL,
-        FILE_CMD_REPLY_QUEUE_FULL,
+        WAV_FILE_CMD_QUEUE_FULL,
+        WAV_FILE_CMD_REPLY_QUEUE_FULL,
         RECORD_CMD_QUEUE_FULL,
         WAV_OPEN_FAIL,
         WAV_DATA_WRITE_FAIL,
@@ -31,19 +31,20 @@ public:
         WAV_CLOSE_FAIL,
         SUFFIX_FILE_FAIL
     };
-    enum class wav_status_t {
+    /*
+    enum class wav_file_status_t {
         RESET = 0,
         REQ_PREPARE,
         PREPARED,
         REQ_FINALIZE,
         FINALIZED
     };
+    */
 
     // === Public class constants ===
 
     // === Public class functions ===
     // functions called from core0
-    static void set_wait_grant_func(void (*func)());
     static bool is_standby();
     static bool is_recording();
     static void set_blank_split(const bool flag);
@@ -52,8 +53,6 @@ public:
     static bool get_verbose();
     static int get_suffix();
     static void clear_suffix();
-    static void _blocking_wait_core0_grant();
-    static void _drain_core0_grant();
     // functions called from core1
     static void record_process_loop(const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
     // functions called from core0 and core1
@@ -65,7 +64,6 @@ public:
 
     // === Public member functions ===
     // functions called from core0
-    void set_status(wav_status_t status);
 
     // === Public member variables ===
     write_wav* inst;
@@ -103,7 +101,6 @@ protected:
     static constexpr int SPDIF_QUEUE_LENGTH = NUM_SUB_FRAME_BUF - 1;
     static constexpr int RECORD_CMD_QUEUE_LENGTH = 2;
     static constexpr int ERROR_QUEUE_LENGTH = 10;
-    static constexpr int CORE0_GRANT_QUEUE_LENGTH = 1;
     static constexpr int BLANK_LEVEL = 16;  // level to detect blank supposing 16bit data
     static constexpr float BLANK_SEC = 0.5;  // the seconds to detect the blank
     static constexpr float BLANK_REPEAT_PROHIBIT_SEC = 10.0;  // the seconds within which detecting blank is prohibited
@@ -112,14 +109,12 @@ protected:
     // === Private class functions ===
     // functions called from core1
     static void _process_error();
-    static void _send_core0_grant();
     static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
     static int _get_last_suffix();
     static void _set_last_suffix(int suffix);
     static blank_status_t _scan_blank(const uint32_t* buff, const uint32_t sub_frame_count, const uint32_t sample_freq);
 
     // === Private class variables ===
-    static void (*_wait_grant_func)();
     static const char* _suffix_info_filename;
     static int _suffix;
     static char _log_filename[16];
@@ -135,19 +130,14 @@ protected:
     static queue_t _spdif_queue;
     static queue_t _record_cmd_queue;
     static queue_t _error_queue;
-    static queue_t _core0_grant_queue;
 
     // === Constructor and Destructor (Private use) ===
     // called from core0
-    spdif_rec_wav(wav_status_t status = wav_status_t::RESET);
-    virtual ~spdif_rec_wav();
 
     // === Private member functions ===
     // functions called from core0
-    void reset();
 
     // === Private member variables ===
-    wav_status_t _status;
 
     friend void spdif_rx_callback_func(uint32_t* buff, uint32_t sub_frame_count, uint8_t c_bits[SPDIF_BLOCK_SIZE / 16], bool parity_err);
 };

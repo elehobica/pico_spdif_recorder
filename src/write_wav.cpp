@@ -10,6 +10,7 @@
 #include <cmath>
 
 #include "spdif_rec_wav.h"
+#include "wav_file_status.h"
 
 /*-----------------/
 /  Local function
@@ -21,12 +22,12 @@ static inline uint64_t _micros()
 
 static inline void _blocking_wait_core0_grant()
 {
-    spdif_rec_wav::_blocking_wait_core0_grant();
+    wav_file_status::_blocking_wait_core0_grant();
 }
 
 static inline void _drain_core0_grant()
 {
-    spdif_rec_wav::_drain_core0_grant();
+    wav_file_status::_drain_core0_grant();
 }
 
 /*-----------------/
@@ -197,7 +198,7 @@ write_wav::~write_wav()
 /*--------------------------/
 /  Public Member functions
 /--------------------------*/
-uint32_t write_wav::_write(const uint32_t* buff, const uint32_t sub_frame_count)
+uint32_t write_wav::write(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     uint64_t start_time = _micros();
     uint32_t bytes = _write_core(buff, sub_frame_count);
@@ -223,22 +224,22 @@ uint32_t write_wav::_write(const uint32_t* buff, const uint32_t sub_frame_count)
     return bytes;
 }
 
-void write_wav::_set_truncate(const float sec)
+void write_wav::set_truncate(const float sec)
 {
     _truncate_sec = sec;
 }
 
-void write_wav::_record_queue_ratio(float queue_ratio)
+void write_wav::record_queue_ratio(float queue_ratio)
 {
     if (queue_ratio > _worst_queue_ratio) _worst_queue_ratio = queue_ratio;
 }
 
-void write_wav::_report_start()
+void write_wav::report_start()
 {
     spdif_rec_wav::_log_printf("recording start \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", _filename.c_str(), _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3);
 }
 
-void write_wav::_report_final()
+void write_wav::report_final()
 {
     float total_sec_f = static_cast<float>(_total_bytes) / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS / _sample_freq - _truncate_sec;
     uint32_t total_sec = static_cast<uint32_t>(total_sec_f);
@@ -260,7 +261,7 @@ void write_wav::_report_final()
     }
 }
 
-bool write_wav::_is_data_written()
+bool write_wav::is_data_written()
 {
     return _data_written;
 }

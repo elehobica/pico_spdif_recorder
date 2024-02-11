@@ -35,12 +35,12 @@ public:
 
     // === Public member functions ===
     // functions called from core1
-    uint32_t _write(const uint32_t* buff, const uint32_t sub_frame_count);
-    void _set_truncate(const float sec);
-    void _record_queue_ratio(float queue_ratio);
-    void _report_start();
-    void _report_final();
-    bool _is_data_written();
+    uint32_t write(const uint32_t* buff, const uint32_t sub_frame_count);
+    void set_truncate(const float sec);
+    void record_queue_ratio(float queue_ratio);
+    void report_start();
+    void report_final();
+    bool is_data_written();
 
 protected:
     // === Private class constants ===

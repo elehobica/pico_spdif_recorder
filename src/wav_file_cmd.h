@@ -48,8 +48,6 @@ public:
     static void process_wav_file_cmd();
 
     // === Public member functions ===
-    // functions called from core0
-    virtual bool execute() = 0;
 
 protected:
     // === Private class functions ===
@@ -66,6 +64,9 @@ protected:
     wav_file_cmd_data_t _cmd_data;
 
     // === Private member functions ===
+    // functions called from core0
+    // _execute() can be run only through this (super) class
+    virtual bool _execute() = 0;
 };
 
 /*--------------------------/
@@ -75,7 +76,8 @@ class nop : public wav_file_cmd
 {
 public:
     nop(wav_file_cmd_data_t& cmd_data);
-    virtual bool execute();
+protected:
+    virtual bool _execute();
 };
 
 /*--------------------------/
@@ -85,7 +87,8 @@ class prepare : public wav_file_cmd
 {
 public:
     prepare(wav_file_cmd_data_t& cmd_data);
-    virtual bool execute();
+protected:
+    virtual bool _execute();
 };
 
 /*--------------------------/
@@ -95,5 +98,6 @@ class finalize : public wav_file_cmd
 {
 public:
     finalize(wav_file_cmd_data_t& cmd_data);
-    virtual bool execute();
+protected:
+    virtual bool _execute();
 };

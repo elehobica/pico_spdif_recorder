@@ -54,7 +54,7 @@ void wav_file_cmd::process_wav_file_cmd()
         queue_remove_blocking(&_wav_file_cmd_queue, &cmd_data);
         {  // execute command
             wav_file_cmd* command = _parse(cmd_data);
-            command->execute();
+            command->_execute();
             delete command;
         }
         {  // set status as done
@@ -109,7 +109,7 @@ nop::nop(wav_file_cmd_data_t& cmd_data) :
 {
 }
 
-bool nop::execute()
+bool nop::_execute()
 {
     return true;
 }
@@ -122,7 +122,7 @@ prepare::prepare(wav_file_cmd_data_t& cmd_data) :
 {
 }
 
-bool prepare::execute()
+bool prepare::_execute()
 {
     wav_file_status* wfs = _cmd_data.wfs;
     uint32_t suffix = _cmd_data.param[0];
@@ -140,7 +140,7 @@ finalize::finalize(wav_file_cmd_data_t& cmd_data) :
 {
 }
 
-bool finalize::execute()
+bool finalize::_execute()
 {
     wav_file_status* wfs = _cmd_data.wfs;
     bool report_flag = static_cast<bool>(_cmd_data.param[0]);

@@ -57,6 +57,9 @@ Note:
 > git clone -b sdk-1.5.1 https://github.com/raspberrypi/pico-extras.git
 > 
 > git clone -b main https://github.com/elehobica/pico_spdif_recorder.git
+> cd pico_spdif_recorder
+> git submodule update -i
+> cd ..
 ```
 * Lanuch "Developer Command Prompt for VS 2019"
 ```
@@ -91,7 +94,7 @@ Note:
 * Fast blink: Background file proceses to close previous file and prepare next file are on-going. During this term, no command requests can be accepted.
 
 ## microSD card recommendation
-* Due to the limitation of single bit SPI interface driven by Raspberry Pi Pico, even with highest class microSD cards (as of 2024), recording in 24bit 176.4 KHz or 192.0 KHz is quite challenging. It will sometimes causes the drops of audio sampling data. The bandwidth status can be monitored in Verbose mode.
+* Due to the limitation of single bit SPI interface driven by Raspberry Pi Pico, even with highest class microSD cards (as of 2024), recording in 24bit 176.4 KHz or 192.0 KHz is quite challenging. It will often causes the drops of audio sampling data. The bandwidth status can be monitored in Verbose mode.
 * With following recommended microSD cards, recording in 24bit 96.0 KHz will be stable as far as experimentally confirmed.
 * Format micorSD card in exFAT with [official SD Card Formatter](https://www.sdcard.org/downloads/formatter/) before usage. 
 

@@ -162,7 +162,6 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                         queue_peek_blocking(&_spdif_queue, &buf_info);
                         blank_status_t blank_status = _scan_blank(&_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id], buf_info.sub_frame_count, sample_freq);
                         if (blank_status == blank_status_t::NOT_BLANK || blank_status == blank_status_t::BLANK_END_DETECTED) {
-                            _blank_scan_sec = 0.0f;
                             buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id];
                             buf_accum = 0;
                             break;
@@ -504,6 +503,7 @@ spdif_rec_wav::blank_status_t spdif_rec_wav::_scan_blank(const uint32_t* buff, c
         if (_blank_scan_sec >= BLANK_REPEAT_PROHIBIT_SEC && _blank_sec > BLANK_SEC) {
             if (_verbose) printf("detected blank end\r\n");
             status = blank_status_t::BLANK_END_DETECTED;
+            _blank_scan_sec = 0.0f;
         }
         _blank_sec = 0.0f;
         _severe_blank_sec = 0.0f;

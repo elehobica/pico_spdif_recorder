@@ -246,7 +246,6 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                     wav_file_status::send_core0_grant();
                 }
 
-                wav_file_cmd::process_file_reply_cmd();
                 _process_error();
 
                 if (!queue_is_empty(&_record_cmd_queue)) {
@@ -330,9 +329,6 @@ void spdif_rec_wav::_process_error()
         }
         case error_type_t::WAV_FILE_CMD_QUEUE_FULL:
             log_printf("ERROR: _wav_file_cmd_queue is full (cmd=%d)\r\n", static_cast<int>(packet.param));
-            break;
-        case error_type_t::WAV_FILE_CMD_REPLY_QUEUE_FULL:
-            log_printf("ERROR: _wav_file_cmd_reply_queue is full (cmd=%d)\r\n", static_cast<int>(packet.param));
             break;
         case error_type_t::RECORD_CMD_QUEUE_FULL:
             log_printf("ERROR: _record_cmd_queue is full (cmd=%d)\r\n", static_cast<int>(packet.param));

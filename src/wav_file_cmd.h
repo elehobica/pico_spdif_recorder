@@ -26,16 +26,17 @@ protected:
     };
     typedef struct _wav_file_cmd_data_t {
         wav_file_cmd_type_t cmd;
-        uint32_t   param[4];
+        wav_file_status* wfs;
+        uint32_t   param[3];
     } wav_file_cmd_data_t;
 
     // === Private class constants ===
     static constexpr int WAV_FILE_CMD_QUEUE_LENGTH = 2;
-    static const std::map<const wav_file_cmd_type_t, const wav_file_status::status_t> _cmd_to_status;
+    static const std::map<const wav_file_cmd_type_t, const wav_file_status::status_t> _cmd_to_req_status;
+    static const std::map<const wav_file_cmd_type_t, const wav_file_status::status_t> _cmd_to_done_status;
 
     // === Private class variables ===
     static queue_t _wav_file_cmd_queue;
-    static queue_t _wav_file_cmd_reply_queue;
 
 public:
     // === Public class functions ===
@@ -43,7 +44,6 @@ public:
     static void initialize();
     static bool req_prepare(wav_file_status& wfs, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     static bool req_finalize(wav_file_status& wfs, const bool report_final, const float truncate_sec = 0.0f);
-    static void process_file_reply_cmd();
     // functions called from core0
     static void process_wav_file_cmd();
 
@@ -55,7 +55,6 @@ protected:
     // === Private class functions ===
     // functions called from core0
     static wav_file_cmd* _parse(wav_file_cmd_data_t& cmd_data);
-    static bool _reply_wav_file_cmd(wav_file_cmd_data_t& cmd_data);
     // functions called from core1
     static bool _req_wav_file_cmd(wav_file_cmd_data_t& cmd_data);
 
@@ -65,6 +64,8 @@ protected:
 
     // === Private member variables ===
     wav_file_cmd_data_t _cmd_data;
+
+    // === Private member functions ===
 };
 
 /*--------------------------/

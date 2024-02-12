@@ -247,7 +247,7 @@ wav_file::~wav_file()
         return;
     }
 
-    spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_OPEN_FAIL);
+    spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_CLOSE_FAIL);
 }
 
 /*--------------------------/

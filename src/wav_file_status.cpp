@@ -29,6 +29,7 @@ void wav_file_status::blocking_wait_core0_grant()
 
 void wav_file_status::drain_core0_grant()
 {
+    // don't use while (!queue_is_empty) loop because it could drain grants which come after
     uint queue_level = queue_get_level(&_core0_grant_queue);
     for (uint i = 0; i < queue_level; i++) {
         bool flag;
@@ -90,7 +91,6 @@ void wav_file_status::wait_status(status_t status)
 {
     while (_status != status) {
         send_core0_grant();
-        wav_file_cmd::process_file_reply_cmd();
     }
 }
 

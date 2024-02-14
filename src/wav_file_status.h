@@ -35,19 +35,19 @@ public:
     // functions called from core0 and core1
 
     // === Constructor and Destructor ===
-    // called from core0
+    // called from core1
     wav_file_status(status_t status = status_t::RESET);
     virtual ~wav_file_status();
 
     // === Public member functions ===
     // functions called from core0
-    void reset();
     void prepare(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     void finalize(const bool report_flag, const float truncate_sec = 0.0f);
     void set_status(status_t status);
     bool is_status(status_t status);
     void wait_status(status_t status);
     // functions called from core1
+    void reset();
     void req_prepare(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     void req_finalize(const bool report_flag, const float truncate_sec = 0.0f);
     uint32_t write(const uint32_t* buff, const uint32_t sub_frame_count);

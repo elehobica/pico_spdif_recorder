@@ -58,12 +58,6 @@ wav_file_status::~wav_file_status()
 {
 }
 
-void wav_file_status::reset()
-{
-    _wav_file = nullptr;
-    _status = status_t::RESET;
-}
-
 void wav_file_status::prepare(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample)
 {
     _wav_file = new wav_file(suffix, sample_freq, bits_per_sample);
@@ -92,6 +86,12 @@ void wav_file_status::wait_status(status_t status)
     while (_status != status) {
         send_core0_grant();
     }
+}
+
+void wav_file_status::reset()
+{
+    _wav_file = nullptr;
+    _status = status_t::RESET;
 }
 
 void wav_file_status::req_prepare(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample)

@@ -120,6 +120,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
     wav_file_status next = wav_file_status();
     uint32_t* buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
     int buf_accum = 0;
+    int last_buf_id = 0;
 
     // Mount FATFS
     FRESULT fr = f_mount(&fs, "", 1);
@@ -162,8 +163,13 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                         queue_peek_blocking(&_spdif_queue, &buf_info);
                         blank_status_t blank_status = _scan_blank(&_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id], buf_info.sub_frame_count, sample_freq);
                         if (blank_status == blank_status_t::NOT_BLANK || blank_status == blank_status_t::BLANK_END_DETECTED) {
-                            buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id];
-                            buf_accum = 0;
+                            // apply accum as equivalent to PRE_START_SEC, but don't exceed num of buffers sotred
+                            int max_buf_accum = static_cast<int>(static_cast<float>(sample_freq) * PRE_START_SEC * NUM_CHANNELS / SPDIF_BLOCK_SIZE) - 1;
+                            int buf_id_diff = (buf_info.buf_id + NUM_SUB_FRAME_BUF - last_buf_id) % NUM_SUB_FRAME_BUF;
+                            int accum = (buf_id_diff < max_buf_accum) ? buf_id_diff : max_buf_accum;
+                            int buf_id = (buf_info.buf_id + NUM_SUB_FRAME_BUF - accum) % NUM_SUB_FRAME_BUF;
+                            buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_id];
+                            buf_accum = accum;
                             break;
                         }
                         queue_remove_blocking(&_spdif_queue, &buf_info);
@@ -225,6 +231,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                         // get and accumulate buffer
                         queue_remove_blocking(&_spdif_queue, &buf_info);
                         buf_accum++;
+                        last_buf_id = (buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF;
                         // write file depending on the conditions
                         if (queue_level == 1 || buf_info.buf_id >= NUM_SUB_FRAME_BUF - 1 || buf_accum >= NUM_SUB_FRAME_BUF/2) {
                             uint32_t sub_frame_count = buf_info.sub_frame_count * buf_accum;
@@ -271,6 +278,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 while (!queue_is_empty(&_spdif_queue)) {
                     sub_frame_buf_info_t buf_info;
                     queue_remove_blocking(&_spdif_queue, &buf_info);
+                    last_buf_id = (buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF;
                 }
                 buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
                 buf_accum = 0;

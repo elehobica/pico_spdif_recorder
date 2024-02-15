@@ -57,7 +57,7 @@ public:
     static void record_process_loop(const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
     // functions called from core0 and core1
     static void start_recording(const bits_per_sample_t bits_per_sample, const bool standby = false);
-    static void end_recording(const bool immediate_split = false, const float truncate_sec = 0.0f);
+    static void end_recording(const bool immediate_split = false);
     static void split_recording(const bits_per_sample_t bits_per_sample);
     static void report_error(const error_type_t type, const uint32_t param = 0L);
     static void log_printf(const char* fmt, ...);

@@ -222,7 +222,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                                     split_recording(bits_per_sample);
                                     break;
                                 } else if (blank_status == blank_status_t::BLANK_SKIP) {
-                                    end_recording(false, BLANK_SKIP_SEC);
+                                    end_recording(false);
                                     start_recording(bits_per_sample, true);  // standby start
                                     break;
                                 }
@@ -264,7 +264,12 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
 
             prev.wait_status(wav_file_status::status_t::FINALIZED);
             prev = cur;
-            float truncate_sec = *(reinterpret_cast<float*>(&record_cmd_data.param[0]));
+            float truncate_sec;
+            if (record_cmd_data.cmd == record_cmd_type_t::END_FOR_SPLIT_CMD) {
+                truncate_sec = 0.0f;
+            } else {
+                truncate_sec = _severe_blank_sec - static_cast<float>(buf_accum) * SPDIF_BLOCK_SIZE / sample_freq / NUM_CHANNELS;
+            }
             prev.req_finalize(true, truncate_sec);
 
             if (record_cmd_data.cmd == record_cmd_type_t::END_CMD) {
@@ -300,11 +305,11 @@ void spdif_rec_wav::start_recording(const bits_per_sample_t bits_per_sample, con
     }
 }
 
-void spdif_rec_wav::end_recording(const bool immediate_split, const float truncate_sec)
+void spdif_rec_wav::end_recording(const bool immediate_split)
 {
     record_cmd_data_t cmd_data;
     cmd_data.cmd = immediate_split ? record_cmd_type_t::END_FOR_SPLIT_CMD : record_cmd_type_t::END_CMD;
-    cmd_data.param[0] = *(reinterpret_cast<const uint32_t*>(&truncate_sec));
+    cmd_data.param[0] = 0L;
     cmd_data.param[1] = 0L;
     if (!queue_try_add(&_record_cmd_queue, &cmd_data)) {
         report_error(error_type_t::RECORD_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));

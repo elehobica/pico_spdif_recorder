@@ -10,12 +10,16 @@
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 #include "pico/util/queue.h"
+#include "hardware/adc.h"
+#include "pico/cyw43_arch.h"
 
 #include "spdif_rx.h"
 #include "tf_card.h"
 #include "spdif_rec_wav.h"
+#include "ntp_client.h"
 
-static constexpr uint PIN_LED = PICO_DEFAULT_LED_PIN;
+bool picoW = false;
+static constexpr uint PIN_LED = 25;  // PICO_DEFAULT_LED_PIN of Pico
 
 static constexpr uint8_t PIN_DCDC_PSM_CTRL = 23;
 static constexpr uint8_t PIN_PICO_SPDIF_RX_DATA = 15;
@@ -45,6 +49,43 @@ enum class signal_event_t {
 static inline uint32_t _millis()
 {
     return to_ms_since_boot(get_absolute_time());
+}
+
+static bool CheckPicoW()
+{
+    adc_init();
+    auto dir = gpio_get_dir(29);
+    auto fnc = gpio_get_function(29);
+    adc_gpio_init(29);
+    adc_select_input(3);
+    auto adc29 = adc_read();
+    gpio_set_function(29, fnc);
+    gpio_set_dir(29, dir);
+
+    dir = gpio_get_dir(25);
+    fnc = gpio_get_function(25);
+    gpio_init(25);
+    gpio_set_dir(25, GPIO_IN);
+    auto gp25 = gpio_get(25);
+    gpio_set_function(25, fnc);
+    gpio_set_dir(25, dir);
+
+    if (gp25) {
+        return true; // Can't tell, so assume yes
+    } else if (adc29 < 200) {
+        return true; // PicoW
+    } else {
+        return false;
+    }
+}
+
+void set_led(bool flag)
+{
+    if (picoW) {
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, flag);
+    } else {
+        gpio_put(PIN_LED, flag);
+    }
 }
 
 void on_stable_func(spdif_rx_samp_freq_t samp_freq)
@@ -121,7 +162,7 @@ void show_help(const bits_per_sample_t bits_per_sample)
 
 void wait_led_blink()
 {
-    gpio_put(PIN_LED, (_millis() / 100) % 2 == 0);
+    set_led((_millis() / 100) % 2 == 0);
     if (!queue_is_empty(&signal_event_queue)) {
         printf("can't accept any commands during background file process\r\n");
         while (!queue_is_empty(&signal_event_queue)) {
@@ -224,11 +265,7 @@ int main()
     char c;
 
     stdio_init_all();
-
-    // LED
-    gpio_init(PIN_LED);
-    gpio_set_dir(PIN_LED, GPIO_OUT);
-    gpio_put(PIN_LED, false);
+    picoW = CheckPicoW();
 
     // DCDC PSM control
     // 0: PFM mode (best efficiency)
@@ -254,6 +291,30 @@ int main()
 
     sleep_ms(500);  // wait for USB serial terminal to be responded
     printf("\r\n");
+
+    // Pico / Pico W dependencies
+    if (picoW) {
+        if (cyw43_arch_init()) {
+            printf("Wi-Fi init failed\r\n");
+            return -1;
+        }
+        /*
+        cyw43_arch_enable_sta_mode();
+        if (cyw43_arch_wifi_connect_timeout_ms("WIFI_SSID", "WIFI_PASSWORD", CYW43_AUTH_WPA2_AES_PSK, 10000)) {
+            printf("failed to connect\r\n");
+            return 1;
+        }
+        printf("connect\r\n");
+        run_ntp();
+        */
+        printf("Pico W\r\n");
+    } else {
+        // LED
+        gpio_init(PIN_LED);
+        gpio_set_dir(PIN_LED, GPIO_OUT);
+        printf("Pico\r\n");
+    }
+    set_led(false);
 
     // queue for Button/Switch
     queue_init(&signal_event_queue, sizeof(signal_event_t), SIGNAL_EVENT_QUEUE_LENGTH);
@@ -361,9 +422,9 @@ int main()
             while (getchar_timeout_us(1) >= 0) {};
         }
         if (spdif_rec_wav::is_recording()) {
-            gpio_put(PIN_LED, (_millis() / 500) % 2 == 0);
+            set_led((_millis() / 500) % 2 == 0);
         } else {
-            gpio_put(PIN_LED, false);
+            set_led(false);
         }
 
         // background file process on core0

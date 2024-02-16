@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
+set(PICO_BOARD "pico_w")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -23,11 +24,20 @@ add_executable(${PROJECT_NAME}
     src/wav_file_status.cpp
     src/wav_file_cmd.cpp
     src/wav_file.cpp
+    src/ntp_client.cpp
+)
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+    $ENV{PICO_EXAMPLES_PATH}/pico_w/wifi/
+    $ENV{PICO_EXAMPLES_PATH}/pico_w/wifi/ntp_client
 )
 
 target_link_libraries(${PROJECT_NAME}
     pico_stdlib
     pico_multicore
+    hardware_adc
+    pico_cyw43_arch_lwip_poll
     spdif_rx
     pico_fatfs
 )

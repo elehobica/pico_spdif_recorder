@@ -6,4 +6,4 @@
 
 #pragma once
 
-void run_ntp();
+void run_ntp(int tz);

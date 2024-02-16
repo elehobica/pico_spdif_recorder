@@ -17,6 +17,7 @@
 #include "tf_card.h"
 #include "spdif_rec_wav.h"
 #include "ntp_client.h"
+#include "config_wifi.h"
 
 bool picoW = false;
 static constexpr uint PIN_LED = 25;  // PICO_DEFAULT_LED_PIN of Pico
@@ -170,9 +171,9 @@ void wait_led_blink()
             queue_remove_blocking(&signal_event_queue, &event);
         }
     }
-    if (getchar_timeout_us(1) > 0) {
+    if (getchar_timeout_us(1) != PICO_ERROR_TIMEOUT) {
         printf("can't accept any commands during background file process\r\n");
-        while (getchar_timeout_us(1) >= 0) {};  // Discard any input.
+        while (getchar_timeout_us(1) != PICO_ERROR_TIMEOUT) {};  // Discard any input.
     }
     sleep_ms(10);
 }
@@ -262,7 +263,7 @@ int main()
     bool user_standy = false;
     bool standby_repeat = true;
     bits_per_sample_t bits_per_sample = bits_per_sample_t::_16BITS;
-    char c;
+    int chr;
 
     stdio_init_all();
     picoW = CheckPicoW();
@@ -296,7 +297,7 @@ int main()
     if (picoW) {
         if (cyw43_arch_init()) {
             printf("Wi-Fi init failed\r\n");
-            return -1;
+            return 1;
         }
         /*
         cyw43_arch_enable_sta_mode();
@@ -322,7 +323,7 @@ int main()
     // negative timeout means exact delay (rather than delay between callbacks)
     if (!add_repeating_timer_us(-INTERVAL_BUTTONS_CHECK_MS * 1000, timer_callback_scan_buttons, nullptr, &timer)) {
         printf("Failed to add timer\r\n");
-        return 0;
+        return 1;
     }
 
     spdif_rec_wav::set_wait_grant_func(wait_led_blink);
@@ -333,7 +334,7 @@ int main()
     sleep_ms(500);  // wait for FATFS to be mounted
 
     // Discard any input.
-    while (getchar_timeout_us(1) >= 0) {};
+    while (getchar_timeout_us(1) != PICO_ERROR_TIMEOUT) {};
 
     printf("---------------------------\r\n");
     printf("--- pico_spdif_recorder ---\r\n");
@@ -385,7 +386,8 @@ int main()
                 }
                 printf("bit resolution: %d bits\r\n", bits_per_sample);
             }
-        } else if ((c = getchar_timeout_us(1)) > 0) {
+        } else if ((chr = getchar_timeout_us(1)) != PICO_ERROR_TIMEOUT) {
+            char c = static_cast<char>(chr);
             if (c == ' ') {
                 toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
             } else if (c == 'r') {
@@ -415,11 +417,13 @@ int main()
                     spdif_rec_wav::clear_suffix();
                     printf("suffix to rec: %03d\r\n", spdif_rec_wav::get_suffix());
                 }
+            } else if (c == 'w' && picoW) {
+                config_wifi();
             } else if (c == 'h') {
                 show_help(bits_per_sample);
             }
             // Discard any input of the rest.
-            while (getchar_timeout_us(1) >= 0) {};
+            while (getchar_timeout_us(1) != PICO_ERROR_TIMEOUT) {};
         }
         if (spdif_rec_wav::is_recording()) {
             set_led((_millis() / 500) % 2 == 0);

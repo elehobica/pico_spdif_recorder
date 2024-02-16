@@ -29,12 +29,15 @@ typedef struct NTP_T_ {
 #define NTP_TEST_TIME (30 * 1000)
 #define NTP_RESEND_TIME (10 * 1000)
 
+static int _tz = 0;
+static bool _got_ntp_time = false;
+
 // Called with results of operation
 static void ntp_result(NTP_T* state, int status, time_t *result) {
     if (status == 0 && result) {
         struct tm *utc = gmtime(result);
-        printf("got ntp response: %02d/%02d/%04d %02d:%02d:%02d\n", utc->tm_mday, utc->tm_mon + 1, utc->tm_year + 1900,
-               utc->tm_hour, utc->tm_min, utc->tm_sec);
+        printf("got ntp response: UTC %04d/%02d/%02d %02d:%02d:%02d\n", utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday, utc->tm_hour, utc->tm_min, utc->tm_sec);
+        _got_ntp_time = true;
     }
 
     if (state->ntp_resend_alarm > 0) {
@@ -124,8 +127,10 @@ static NTP_T* ntp_init(void) {
 }
 
 // Runs ntp
-void run_ntp()
+void run_ntp(int tz)
 {
+    _tz = tz;
+    _got_ntp_time = false;
     NTP_T *state = ntp_init();
     if (!state) return;
 
@@ -156,8 +161,7 @@ void run_ntp()
         // you can poll as often as you like, however if you have nothing else to do you can
         // choose to sleep until either a specified time, or cyw43_arch_poll() has work to do:
         cyw43_arch_wait_for_work_until(state->dns_request_sent ? at_the_end_of_time : state->ntp_test_time);
-
-        printf(".");
+        if (_got_ntp_time) break;
     }
     free(state);
 }

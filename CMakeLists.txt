@@ -41,7 +41,7 @@ target_link_libraries(${PROJECT_NAME}
     pico_multicore
     hardware_adc
     pico_cyw43_arch_lwip_poll
-    spdif_rx
+    pico_spdif_rx
     pico_fatfs
 )
 

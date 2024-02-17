@@ -29,14 +29,22 @@ typedef struct NTP_T_ {
 #define NTP_TEST_TIME (30 * 1000)
 #define NTP_RESEND_TIME (10 * 1000)
 
-static int _tz = 0;
+static const char* _tz;
 static bool _got_ntp_time = false;
 
 // Called with results of operation
 static void ntp_result(NTP_T* state, int status, time_t *result) {
     if (status == 0 && result) {
-        struct tm *utc = gmtime(result);
-        printf("got ntp response: UTC %04d/%02d/%02d %02d:%02d:%02d\n", utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday, utc->tm_hour, utc->tm_min, utc->tm_sec);
+        const char ENV_TZ[] = "TZ";
+        setenv(ENV_TZ, _tz, 1);
+        tzset();
+
+        struct tm t;
+        localtime_r(result, &t);
+
+        //struct tm *utc = gmtime(result);
+        //struct tm *utc = localtime(result);
+        printf("got ntp response: %s %04d/%02d/%02d %02d:%02d:%02d\n", _tz, t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
         _got_ntp_time = true;
     }
 
@@ -127,10 +135,11 @@ static NTP_T* ntp_init(void) {
 }
 
 // Runs ntp
-void run_ntp(int tz)
+void run_ntp(const char* tz)
 {
     _tz = tz;
     _got_ntp_time = false;
+
     NTP_T *state = ntp_init();
     if (!state) return;
 

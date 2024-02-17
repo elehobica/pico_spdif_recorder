@@ -26,6 +26,8 @@ add_executable(${PROJECT_NAME}
     src/wav_file.cpp
     src/ntp_client.cpp
     src/config_wifi.cpp
+    src/UserFlash.cpp
+    src/ConfigParam.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE

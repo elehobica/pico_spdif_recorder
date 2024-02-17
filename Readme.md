@@ -62,7 +62,7 @@ Note:
 > git submodule update -i
 > cd ..
 ```
-* Lanuch "Developer Command Prompt for VS 2019"
+* Lanuch "Developer Command Prompt for VS 2022"
 ```
 > cd pico_spdif_recorder
 > mkdir build && cd build

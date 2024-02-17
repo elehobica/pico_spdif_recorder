@@ -106,8 +106,8 @@ void spdif_rx_init()
     spdif_rx_config_t spdif_rx_config = {
         .data_pin = PIN_PICO_SPDIF_RX_DATA,
         .pio_sm = 0,
-        .dma_channel0 = 0,
-        .dma_channel1 = 1,
+        .dma_channel0 = 2,
+        .dma_channel1 = 3,
         .alarm = 0,
         .flags = SPDIF_RX_FLAGS_ALL
     };
@@ -267,6 +267,10 @@ int main()
 
     stdio_init_all();
     picoW = CheckPicoW();
+    while (!stdio_usb_connected()) {
+        sleep_ms(100);
+    }
+    printf("\r\n");
 
     // DCDC PSM control
     // 0: PFM mode (best efficiency)
@@ -290,24 +294,13 @@ int main()
     // FATFS config
     fatfs_config();
 
-    sleep_ms(500);  // wait for USB serial terminal to be responded
-    printf("\r\n");
-
     // Pico / Pico W dependencies
+    // cyw43_arch_init() needs to be done after spdif_rx_init() (by unknown reason)
     if (picoW) {
         if (cyw43_arch_init()) {
             printf("Wi-Fi init failed\r\n");
             return 1;
         }
-        /*
-        cyw43_arch_enable_sta_mode();
-        if (cyw43_arch_wifi_connect_timeout_ms("WIFI_SSID", "WIFI_PASSWORD", CYW43_AUTH_WPA2_AES_PSK, 10000)) {
-            printf("failed to connect\r\n");
-            return 1;
-        }
-        printf("connect\r\n");
-        run_ntp();
-        */
         printf("Pico W\r\n");
     } else {
         // LED

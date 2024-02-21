@@ -18,6 +18,7 @@
 #include "spdif_rec_wav.h"
 #include "ntp_client.h"
 #include "config_wifi.h"
+#include "ConfigParam.h"
 
 bool picoW = false;
 static constexpr uint PIN_LED = 25;  // PICO_DEFAULT_LED_PIN of Pico
@@ -270,6 +271,8 @@ int main()
     sleep_ms(1000);  // serial connection waiting
     printf("\r\n");
 
+    configParam.printInfo();
+
     // DCDC PSM control
     // 0: PFM mode (best efficiency)
     // 1: PWM mode (improved ripple)
@@ -300,6 +303,10 @@ int main()
             return 1;
         }
         printf("Pico W\r\n");
+        // connect Wi-Fi to get time by NTP
+        if (GET_CFG_WIFI_SSID[0]) {
+            connect_wifi(std::string(GET_CFG_WIFI_SSID), std::string(GET_CFG_WIFI_PASS), std::string(GET_CFG_TIME_ZONE));
+        }
     } else {
         // LED
         gpio_init(PIN_LED);

@@ -20,9 +20,10 @@ ConfigParamUser& ConfigParamUser::instance()
 {
     static ConfigParamUser* _instPtr = nullptr;
     if (_instPtr == nullptr) {
+        LoadBehavior loadDefaultBehavior = LoadBehavior::LOAD_DEFAULT_IF_FLASH_IS_BLANK;
+        //loadDefaultBehavior = LoadBehavior::FORCE_LOAD_DEFAULT;  // uncomment this instead of below to clear flash to default
         _instPtr = new ConfigParamUser(__NUM_CFG_PARAMS__);
-        //_instPtr->initialize(LoadBehavior::FORCE_LOAD_DEFAULT);  // uncomment this instead of below to clear flash to default
-        _instPtr->initialize();
+        _instPtr->initialize(loadDefaultBehavior);
         _instPtr->incBootCount();
     }
     return *_instPtr;
@@ -207,7 +208,7 @@ void ConfigParamUser::initialize(LoadBehavior loadDefaultBehavior)
     loadDefault();
     // switch to step to load from Flash
     if (loadDefaultBehavior == LoadBehavior::FORCE_LOAD_DEFAULT) { return; }
-    printInfo();
+    //printInfo();
     if (loadDefaultBehavior == LoadBehavior::LOAD_DEFAULT_IF_FLASH_IS_BLANK && getBootCountFromFlash() == 0xffffffffUL) { return; }
     // load from Flash
     for (int i = 0; i < _numParams; i++) {
@@ -303,55 +304,55 @@ char *ConfigParamUser::getStr(uint32_t id)
     return reinterpret_cast<char *>(configParamItems[id].ptr);
 }
 
-void ConfigParamUser::setU8(uint32_t id, uint8_t val)
+void ConfigParamUser::setU8(uint32_t id, const uint8_t val)
 {
     assert(configParamItems[id].paramType == CFG_UINT8_T);
     *(reinterpret_cast<uint8_t *>(configParamItems[id].ptr)) = val;
 }
 
-void ConfigParamUser::setU16(uint32_t id, uint16_t val)
+void ConfigParamUser::setU16(uint32_t id, const uint16_t val)
 {
     assert(configParamItems[id].paramType == CFG_UINT16_T);
     *(reinterpret_cast<uint16_t *>(configParamItems[id].ptr)) = val;
 }
 
-void ConfigParamUser::setU32(uint32_t id, uint32_t val)
+void ConfigParamUser::setU32(uint32_t id, const uint32_t val)
 {
     assert(configParamItems[id].paramType == CFG_UINT32_T);
     *(reinterpret_cast<uint32_t *>(configParamItems[id].ptr)) = val;
 }
 
-void ConfigParamUser::setU64(uint32_t id, uint64_t val)
+void ConfigParamUser::setU64(uint32_t id, const uint64_t val)
 {
     assert(configParamItems[id].paramType == CFG_UINT64_T);
     *(reinterpret_cast<uint64_t *>(configParamItems[id].ptr)) = val;
 }
 
-void ConfigParamUser::setI8(uint32_t id, int8_t val)
+void ConfigParamUser::setI8(uint32_t id, const int8_t val)
 {
     assert(configParamItems[id].paramType == CFG_INT8_T);
     *(reinterpret_cast<int8_t *>(configParamItems[id].ptr)) = val;
 }
 
-void ConfigParamUser::setI16(uint32_t id, int16_t val)
+void ConfigParamUser::setI16(uint32_t id, const int16_t val)
 {
     assert(configParamItems[id].paramType == CFG_INT16_T);
     *(reinterpret_cast<int16_t *>(configParamItems[id].ptr)) = val;
 }
 
-void ConfigParamUser::setI32(uint32_t id, int32_t val)
+void ConfigParamUser::setI32(uint32_t id, const int32_t val)
 {
     assert(configParamItems[id].paramType == CFG_INT32_T);
     *(reinterpret_cast<int32_t *>(configParamItems[id].ptr)) = val;
 }
 
-void ConfigParamUser::setI64(uint32_t id, int64_t val)
+void ConfigParamUser::setI64(uint32_t id, const int64_t val)
 {
     assert(configParamItems[id].paramType == CFG_INT64_T);
     *(reinterpret_cast<int64_t *>(configParamItems[id].ptr)) = val;
 }
 
-void ConfigParamUser::setStr(uint32_t id, char *str)
+void ConfigParamUser::setStr(uint32_t id, const char *str)
 {
     assert(configParamItems[id].paramType == CFG_STRING_T);
     char *ptr = reinterpret_cast<char *>(configParamItems[id].ptr);

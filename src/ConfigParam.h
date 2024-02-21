@@ -93,15 +93,15 @@ namespace ConfigParam
         int32_t getI32(uint32_t id);
         int64_t getI64(uint32_t id);
         char *getStr(uint32_t id);
-        void setU8(uint32_t id, uint8_t val);
-        void setU16(uint32_t id, uint16_t val);
-        void setU32(uint32_t id, uint32_t val);
-        void setU64(uint32_t id, uint64_t val);
-        void setI8(uint32_t id, int8_t val);
-        void setI16(uint32_t id, int16_t val);
-        void setI32(uint32_t id, int32_t val);
-        void setI64(uint32_t id, int64_t val);
-        void setStr(uint32_t id, char *str);
+        void setU8(uint32_t id, const uint8_t val);
+        void setU16(uint32_t id, const uint16_t val);
+        void setU32(uint32_t id, const uint32_t val);
+        void setU64(uint32_t id, const uint64_t val);
+        void setI8(uint32_t id, const int8_t val);
+        void setI16(uint32_t id, const int16_t val);
+        void setI32(uint32_t id, const int32_t val);
+        void setI64(uint32_t id, const int64_t val);
+        void setStr(uint32_t id, const char *str);
 
     protected:
         ParamItem_t configParamItems[__NUM_CFG_PARAMS__] = {

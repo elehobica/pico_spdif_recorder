@@ -46,6 +46,10 @@ target_link_libraries(${PROJECT_NAME}
     pico_fatfs
 )
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    PICO_FLASH_ASSUME_CORE1_SAFE
+)
+
 pico_enable_stdio_usb(${PROJECT_NAME} 1)
 pico_enable_stdio_uart(${PROJECT_NAME} 0)
 

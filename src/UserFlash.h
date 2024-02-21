@@ -7,7 +7,6 @@
 #pragma once
 
 #include "hardware/flash.h"
-#include "hardware/sync.h"
 
 //=================================
 // Interface of UserFlash class
@@ -37,4 +36,7 @@ protected:
     virtual ~UserFlash();
     UserFlash(const UserFlash&) = delete;
 	UserFlash& operator=(const UserFlash&) = delete;
+    void _program_core();
+
+friend void _user_flash_program_core(void*);
 };

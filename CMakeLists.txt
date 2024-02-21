@@ -17,7 +17,6 @@ add_subdirectory(lib/pico_spdif_rx)
 add_subdirectory(lib/pico_spdif_rx/samples/lib/pico_audio_32b) # for extended audio.h
 add_subdirectory(lib/pico_fatfs)
 
-# select sample application here (choose only one)
 add_executable(${PROJECT_NAME}
     src/main.cpp
     src/spdif_rec_wav.cpp
@@ -38,8 +37,10 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_link_libraries(${PROJECT_NAME}
     pico_stdlib
-    pico_multicore
     hardware_adc
+    hardware_exception
+    pico_flash
+    pico_multicore
     pico_cyw43_arch_lwip_poll
     pico_spdif_rx
     pico_fatfs

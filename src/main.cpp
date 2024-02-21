@@ -267,9 +267,7 @@ int main()
 
     stdio_init_all();
     picoW = CheckPicoW();
-    while (!stdio_usb_connected()) {
-        sleep_ms(100);
-    }
+    sleep_ms(1000);  // serial connection waiting
     printf("\r\n");
 
     // DCDC PSM control

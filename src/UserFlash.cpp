@@ -4,10 +4,17 @@
 / refer to https://opensource.org/licenses/BSD-2-Clause
 /------------------------------------------------------*/
 
+#include "UserFlash.h"
+
 #include <cstdio>
 #include <cstring>
+#include "pico/flash.h"
 
-#include "UserFlash.h"
+void _user_flash_program_core(void* ptr)
+{
+    UserFlash* inst = static_cast<UserFlash*>(ptr);
+    inst->_program_core();
+}
 
 //=================================
 // Implementation of UserFlash class
@@ -55,10 +62,16 @@ void UserFlash::writeReserve(uint32_t flash_ofs, size_t size, const void *buf)
 void UserFlash::program()
 {
     // Need to stop interrupt during erase and program
-    // noted that if core1 is running, it must be stopped also
-    uint32_t ints = save_and_disable_interrupts();
+    // noted that if core1 is running, it must be stopped also if accessing flash
+    int result = flash_safe_execute(_user_flash_program_core, this, 100);
+    if (result != PICO_OK) {
+        printf("ERROR: failed to program UserFlash\n");
+    }
+}
+
+void UserFlash::_program_core()
+{
     flash_range_erase(UserFlashOfs, EraseSize);
     flash_range_program(UserFlashOfs, data, FLASH_PAGE_SIZE);
-    restore_interrupts(ints);
     memcpy(data, flashContents, sizeof(data));
 }

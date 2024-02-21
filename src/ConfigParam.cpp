@@ -6,11 +6,12 @@
 / refer to https://opensource.org/licenses/BSD-2-Clause
 /-----------------------------------------------------------*/
 
+#include "ConfigParam.h"
+
 #include <cstdio>
 #include <cstring>
 #include <cinttypes>
 #include "UserFlash.h"
-#include "ConfigParam.h"
 
 namespace ConfigParam
 {

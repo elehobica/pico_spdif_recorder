@@ -292,9 +292,6 @@ int main()
     // spdif_rx initialize
     spdif_rx_init();
 
-    // FATFS config
-    fatfs_config();
-
     // Pico / Pico W dependencies
     // cyw43_arch_init() needs to be done after spdif_rx_init() (by unknown reason)
     if (picoW) {
@@ -323,6 +320,9 @@ int main()
         printf("Failed to add timer\r\n");
         return 1;
     }
+
+    // FATFS config
+    fatfs_config();
 
     spdif_rec_wav::set_wait_grant_func(wait_led_blink);
     // spdif_rec_wav process runs on Core1

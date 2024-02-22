@@ -7,8 +7,10 @@
 #include <string.h>
 #include <time.h>
 
+#include "hardware/rtc.h"
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
+#include "pico/util/datetime.h"
 
 #include "lwip/dns.h"
 #include "lwip/pbuf.h"
@@ -40,12 +42,26 @@ static void ntp_result(NTP_T* state, int status, time_t *result) {
         tzset();
 
         struct tm t;
-        localtime_r(result, &t);
+        gmtime_r(result, &t);  // utc
 
-        //struct tm *utc = gmtime(result);
-        //struct tm *utc = localtime(result);
-        printf("got ntp response: %s %04d/%02d/%02d %02d:%02d:%02d\n", _tz, t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+        struct tm lt;
+        localtime_r(result, &lt);  // localtime
+        printf("got ntp response: %s %04d/%02d/%02d %02d:%02d:%02d\n", _tz, lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday, lt.tm_hour, lt.tm_min, lt.tm_sec);
+
         _got_ntp_time = true;
+
+        // copy to RTC (UTC)
+        datetime_t t_rtc = {
+            .year  = static_cast<int16_t>(t.tm_year + 1900),
+            .month = static_cast<int8_t>(t.tm_mon + 1),
+            .day   = static_cast<int8_t>(t.tm_mday),
+            .dotw  = static_cast<int8_t>(t.tm_wday),  // 0 is Sunday, so 5 is Friday
+            .hour  = static_cast<int8_t>(t.tm_hour),
+            .min   = static_cast<int8_t>(t.tm_min),
+            .sec   = static_cast<int8_t>(t.tm_sec)
+        };
+        rtc_init();
+        rtc_set_datetime(&t_rtc);
     }
 
     if (state->ntp_resend_alarm > 0) {

@@ -37,6 +37,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_link_libraries(${PROJECT_NAME}
     pico_stdlib
+    hardware_rtc
     hardware_adc
     hardware_exception
     pico_flash

@@ -3,6 +3,7 @@
 #include "ff.h"
 #include "diskio.h"
 
+#include "hardware/rtc.h"
 #include "pico/stdlib.h"
 
 /*--------------------------------------------------------------------------
@@ -434,7 +435,15 @@ DRESULT disk_read (
 /* get the current time */
 DWORD get_fattime (void)
 {
-    return 0;
+    datetime_t t;
+    rtc_get_datetime(&t);
+
+    return ((DWORD) (t.year - 1980) << 25) |
+           ((DWORD) t.month         << 21) |
+           ((DWORD) t.day           << 16) |
+           ((DWORD) t.hour          << 11) |
+           ((DWORD) t.min           <<  5) |
+           ((DWORD) t.sec           >>  1); // sec /2
 }
 #endif
 

@@ -156,6 +156,9 @@ void show_help(const bits_per_sample_t bits_per_sample)
     printf(" 'b' to toggle auto blank split\r\n");
     printf(" 'v' to toggle verbose\r\n");
     printf(" 'c' to clear suffix (*2)\r\n");
+    if (picoW) {
+        printf(" 'w' to configure wifi (*2)\r\n");
+    }
     printf(" 'h' to show this help\r\n");
     printf("  (*1) effective while recording\r\n");
     printf("  (*2) effective while not recording\r\n");
@@ -306,7 +309,7 @@ int main()
         }
         printf("Pico W\r\n");
         // connect Wi-Fi to get time by NTP
-        if (GET_CFG_WIFI_SSID[0]) {
+        if (GET_CFG_WIFI_SSID[0] >= 0x20 && GET_CFG_WIFI_SSID[0] <= 0x7e && GET_CFG_WIFI_PASS[0] >= 0x20 && GET_CFG_WIFI_PASS[0] <= 0x7e) {
             set_led(true);
             connect_wifi(std::string(GET_CFG_WIFI_SSID), std::string(GET_CFG_WIFI_PASS));
         }

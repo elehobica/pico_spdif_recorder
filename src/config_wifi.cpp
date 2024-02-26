@@ -75,19 +75,24 @@ static bool _get_item(const char* id, char* str, bool num_only = false)
     return false;
 }
 
-bool connect_wifi(const std::string& ssid, const std::string& password)
+bool connect_wifi(const std::string& ssid, const std::string& password, const int retry)
 {
     printf("... connecting Wi-Fi\r\n");
 
     cyw43_arch_enable_sta_mode();
-    if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), CYW43_AUTH_WPA2_AES_PSK, 10000)) {
-        printf("failed to connect\r\n");
-        return false;
+    for (int i = 0; i < retry; i++) {
+        if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), CYW43_AUTH_WPA2_AES_PSK, 10000)) {
+            printf("failed to connect: %d\r\n", i);
+            if (i < retry - 1) {
+                continue;
+            } else {
+                return false;
+            }
+        }
     }
     printf("connected\r\n");
-    run_ntp(_tz.c_str());
 
-    return true;
+    return run_ntp(_tz.c_str());
 }
 
 bool config_wifi()

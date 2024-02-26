@@ -151,13 +151,13 @@ static NTP_T* ntp_init(void) {
 }
 
 // Runs ntp
-void run_ntp(const char* tz)
+bool run_ntp(const char* tz)
 {
     _tz = tz;
     _got_ntp_time = false;
 
     NTP_T *state = ntp_init();
-    if (!state) return;
+    if (!state) return false;
 
     while (true) {
         if (absolute_time_diff_us(get_absolute_time(), state->ntp_test_time) < 0 && !state->dns_request_sent) {
@@ -186,7 +186,9 @@ void run_ntp(const char* tz)
         // you can poll as often as you like, however if you have nothing else to do you can
         // choose to sleep until either a specified time, or cyw43_arch_poll() has work to do:
         cyw43_arch_wait_for_work_until(state->dns_request_sent ? at_the_end_of_time : state->ntp_test_time);
-        if (_got_ntp_time) break;
+        if (_got_ntp_time) return true;
     }
     free(state);
+
+    return false;
 }

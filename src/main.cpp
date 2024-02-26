@@ -308,7 +308,7 @@ int main()
         // connect Wi-Fi to get time by NTP
         if (GET_CFG_WIFI_SSID[0]) {
             set_led(true);
-            connect_wifi(std::string(GET_CFG_WIFI_SSID), std::string(GET_CFG_WIFI_PASS), std::string("UTC+0"));
+            connect_wifi(std::string(GET_CFG_WIFI_SSID), std::string(GET_CFG_WIFI_PASS));
         }
     } else {
         printf("Pico\r\n");

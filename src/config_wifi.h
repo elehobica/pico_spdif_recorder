@@ -9,4 +9,4 @@
 #include <string>
 
 bool config_wifi();
-bool connect_wifi(const std::string& ssid, const std::string& password, const std::string& tz);
+bool connect_wifi(const std::string& ssid, const std::string& password);

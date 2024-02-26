@@ -15,7 +15,8 @@
 #include "ConfigParam.h"
 
 static constexpr size_t STR_SIZE = 256;
-static std::string ssid, password, tz;
+static std::string ssid, password;
+static const std::string _tz("UTC+0");
 
 static bool _get_item(const char* id, char* str, bool num_only = false)
 {
@@ -74,7 +75,7 @@ static bool _get_item(const char* id, char* str, bool num_only = false)
     return false;
 }
 
-bool connect_wifi(const std::string& ssid, const std::string& password, const std::string& tz)
+bool connect_wifi(const std::string& ssid, const std::string& password)
 {
     printf("... connecting Wi-Fi\r\n");
 
@@ -84,7 +85,7 @@ bool connect_wifi(const std::string& ssid, const std::string& password, const st
         return false;
     }
     printf("connected\r\n");
-    run_ntp(tz.c_str());
+    run_ntp(_tz.c_str());
 
     return true;
 }
@@ -94,7 +95,7 @@ bool config_wifi()
     bool flag;
     char str[STR_SIZE] = {};
 
-    printf("[Wi-Fi / TZ configuration]\r\n");
+    printf("[Wi-Fi configuration]\r\n");
     flag = _get_item("SSID", str);
     printf("\r\n");
     if (flag) {
@@ -102,38 +103,17 @@ bool config_wifi()
         flag = _get_item("Password", str);
         printf("\r\n");
     }
-    if (flag) {
-        password = std::string(str);
-        flag = _get_item("TZ", str);
-        printf("\r\n");
-    }
     if (!flag) {
-        printf("Wi-Fi / TZ configuration canceled\r\n");
+        printf("Wi-Fi configuration canceled\r\n");
         return false;
     }
-    tz = std::string(str);
-    printf("Wi-Fi / TZ configured\r\n");
+    password = std::string(str);
+    printf("Wi-Fi configured\r\n");
 
     // store to flash
     configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_SSID, ssid.c_str());
     configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_PASS, password.c_str());
     configParam.finalize();
 
-    return connect_wifi(ssid, password, tz);
-    /*
-    //printf("SSID: %s\r\n", ssid.c_str());
-    //printf("Password: %s\r\n", password.c_str());
-    //printf("TZ: %s\r\n", tz.c_str());
-    printf("... connecting Wi-Fi\r\n");
-
-    cyw43_arch_enable_sta_mode();
-    if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), CYW43_AUTH_WPA2_AES_PSK, 10000)) {
-        printf("failed to connect\r\n");
-        return false;
-    }
-    printf("connected\r\n");
-    run_ntp(tz.c_str());
-
-    return true;
-    */
+    return connect_wifi(ssid, password);
 }

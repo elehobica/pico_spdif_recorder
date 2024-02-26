@@ -27,7 +27,6 @@
 #define GET_CFG_BOOT_COUNT GETU32(ConfigParam::CFG_BOOT_COUNT)
 #define GET_CFG_WIFI_SSID  GETSTR(ConfigParam::CFG_WIFI_SSID)
 #define GET_CFG_WIFI_PASS  GETSTR(ConfigParam::CFG_WIFI_PASS)
-#define GET_CFG_TIME_ZONE  GETSTR(ConfigParam::CFG_TIME_ZONE)
 
 namespace ConfigParam
 {
@@ -55,7 +54,6 @@ namespace ConfigParam
         CFG_BOOT_COUNT = 0,
         CFG_WIFI_SSID,
         CFG_WIFI_PASS,
-        CFG_TIME_ZONE,
         __NUM_CFG_PARAMS__
     } ParamID_t;
 
@@ -108,8 +106,7 @@ namespace ConfigParam
         //  id               name                type                     size default ofs     ptr
             {CFG_BOOT_COUNT, "CFG_BOOT_COUNT",   ParamType::CFG_UINT32_T,   4, "0",    0x000,  nullptr},
             {CFG_WIFI_SSID,  "CFG_WIFI_SSID",    ParamType::CFG_STRING_T,  16, "",     0x004,  nullptr},
-            {CFG_WIFI_PASS,  "CFG_WIFI_PASS",    ParamType::CFG_STRING_T,  16, "",     0x014,  nullptr},
-            {CFG_TIME_ZONE,  "CFG_TIME_ZONE",    ParamType::CFG_STRING_T,  16, "",     0x024,  nullptr}
+            {CFG_WIFI_PASS,  "CFG_WIFI_PASS",    ParamType::CFG_STRING_T,  16, "",     0x014,  nullptr}
         };
         int _numParams;
 

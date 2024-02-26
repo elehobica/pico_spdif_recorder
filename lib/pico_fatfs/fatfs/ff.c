@@ -272,9 +272,11 @@
 #if FF_NORTC_YEAR < 1980 || FF_NORTC_YEAR > 2107 || FF_NORTC_MON < 1 || FF_NORTC_MON > 12 || FF_NORTC_MDAY < 1 || FF_NORTC_MDAY > 31
 #error Invalid FF_FS_NORTC settings
 #endif
-#define GET_FATTIME()	((DWORD)(FF_NORTC_YEAR - 1980) << 25 | (DWORD)FF_NORTC_MON << 21 | (DWORD)FF_NORTC_MDAY << 16)
+#define GET_FATTIME(fs_type)	((DWORD)(FF_NORTC_YEAR - 1980) << 25 | (DWORD)FF_NORTC_MON << 21 | (DWORD)FF_NORTC_MDAY << 16)
+#define GET_TZ(fs_type)	(0)
 #else
-#define GET_FATTIME()	get_fattime()
+#define GET_FATTIME(fs_type)	get_fattime(fs_type)
+#define GET_TZ(fs_type)			get_tz(fs_type)
 #endif
 
 
@@ -3662,6 +3664,7 @@ FRESULT f_open (
 	FATFS *fs;
 #if !FF_FS_READONLY
 	DWORD cl, bcs, clst, tm;
+	BYTE tz;
 	LBA_t sc;
 	FSIZE_t ofs;
 #endif
@@ -3717,8 +3720,9 @@ FRESULT f_open (
 					memset(fs->dirbuf + 2, 0, 30);	/* Clear 85 entry except for NumSec */
 					memset(fs->dirbuf + 38, 0, 26);	/* Clear C0 entry except for NumName and NameHash */
 					fs->dirbuf[XDIR_Attr] = AM_ARC;
-					st_dword(fs->dirbuf + XDIR_CrtTime, GET_FATTIME());
+					st_dword(fs->dirbuf + XDIR_CrtTime, GET_FATTIME(fs->fs_type));
 					fs->dirbuf[XDIR_GenFlags] = 1;
+					fs->dirbuf[XDIR_CrtTZ] = tz;
 					res = store_xdir(&dj);
 					if (res == FR_OK && fp->obj.sclust != 0) {	/* Remove the cluster chain if exist */
 						res = remove_chain(&fp->obj, fp->obj.sclust, 0);
@@ -3728,7 +3732,7 @@ FRESULT f_open (
 #endif
 				{
 					/* Set directory entry initial state */
-					tm = GET_FATTIME();					/* Set created time */
+					tm = GET_FATTIME(fs->fs_type);					/* Set created time */
 					st_dword(dj.dir + DIR_CrtTime, tm);
 					st_dword(dj.dir + DIR_ModTime, tm);
 					cl = ld_clust(fs, dj.dir);			/* Get current cluster chain */
@@ -4076,6 +4080,7 @@ FRESULT f_sync (
 	FRESULT res;
 	FATFS *fs;
 	DWORD tm;
+	WORD tz;
 	BYTE *dir;
 
 
@@ -4089,8 +4094,9 @@ FRESULT f_sync (
 			}
 #endif
 			/* Update the directory entry */
-			tm = GET_FATTIME();				/* Modified time */
+			tm = GET_FATTIME(fs->fs_type);				/* Modified time */
 #if FF_FS_EXFAT
+			tz = GET_TZ(fs->fs_type);				/* Modified time */
 			if (fs->fs_type == FS_EXFAT) {
 				res = fill_first_frag(&fp->obj);	/* Fill first fragment on the FAT if needed */
 				if (res == FR_OK) {
@@ -4110,6 +4116,7 @@ FRESULT f_sync (
 						st_qword(fs->dirbuf + XDIR_ValidFileSize, fp->obj.objsize);	/* (FatFs does not support Valid File Size feature) */
 						st_dword(fs->dirbuf + XDIR_ModTime, tm);		/* Update modified time */
 						fs->dirbuf[XDIR_ModTime10] = 0;
+						fs->dirbuf[XDIR_ModTZ] = tz;
 						st_dword(fs->dirbuf + XDIR_AccTime, 0);
 						res = store_xdir(&dj);	/* Restore it to the directory */
 						if (res == FR_OK) {
@@ -4993,6 +5000,7 @@ FRESULT f_mkdir (
 	FFOBJID sobj;
 	FATFS *fs;
 	DWORD dcl, pcl, tm;
+	WORD tz;
 	DEF_NAMBUF
 
 
@@ -5012,7 +5020,8 @@ FRESULT f_mkdir (
 			if (dcl == 0) res = FR_DENIED;		/* No space to allocate a new cluster? */
 			if (dcl == 1) res = FR_INT_ERR;		/* Any insanity? */
 			if (dcl == 0xFFFFFFFF) res = FR_DISK_ERR;	/* Disk error? */
-			tm = GET_FATTIME();
+			tm = GET_FATTIME(fs->fs_type);
+			tz = GET_TZ(fs->fs_type);
 			if (res == FR_OK) {
 				res = dir_clear(fs, dcl);		/* Clean up the new table */
 				if (res == FR_OK) {
@@ -5039,6 +5048,7 @@ FRESULT f_mkdir (
 					st_dword(fs->dirbuf + XDIR_ValidFileSize, (DWORD)fs->csize * SS(fs));
 					fs->dirbuf[XDIR_GenFlags] = 3;				/* Initialize the object flag */
 					fs->dirbuf[XDIR_Attr] = AM_DIR;				/* Attribute */
+					fs->dirbuf[XDIR_ModTZ] = tz;				/* TimeZone */
 					res = store_xdir(&dj);
 				} else
 #endif
@@ -5687,7 +5697,7 @@ static FRESULT create_partition (
 #else
 		ss = FF_MAX_SS;
 #endif
-		rnd = (DWORD)sz_drv + GET_FATTIME();	/* Random seed */
+		rnd = (DWORD)sz_drv + GET_FATTIME(fs->fs_type);	/* Random seed */
 		align = GPT_ALIGN / ss;				/* Partition alignment for GPT [sector] */
 		sz_ptbl = GPT_ITEMS * SZ_GPTE / ss;	/* Size of partition table [sector] */
 		top_bpt = sz_drv - sz_ptbl - 1;		/* Backup partiiton table start sector */
@@ -5935,7 +5945,7 @@ FRESULT f_mkfs (
 		fsty = FS_FAT16;
 	} while (0);
 
-	vsn = (DWORD)sz_vol + GET_FATTIME();	/* VSN generated from current time and partitiion size */
+	vsn = (DWORD)sz_vol + GET_FATTIME(fs->fs_type);	/* VSN generated from current time and partitiion size */
 
 #if FF_FS_EXFAT
 	if (fsty == FS_EXFAT) {	/* Create an exFAT volume */

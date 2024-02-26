@@ -268,10 +268,15 @@ int main()
 
     stdio_init_all();
     picoW = CheckPicoW();
-    sleep_ms(1000);  // serial connection waiting
+
+    // serial connection waiting (max 1 sec)
+    while (!stdio_usb_connected() && _millis() < 1000) {
+        sleep_ms(100);
+    }
     printf("\r\n");
 
-    configParam.printInfo();
+    // print configuration parameters in flash
+    //configParam.printInfo();
 
     // DCDC PSM control
     // 0: PFM mode (best efficiency)
@@ -302,13 +307,14 @@ int main()
         printf("Pico W\r\n");
         // connect Wi-Fi to get time by NTP
         if (GET_CFG_WIFI_SSID[0]) {
-            connect_wifi(std::string(GET_CFG_WIFI_SSID), std::string(GET_CFG_WIFI_PASS), std::string(GET_CFG_TIME_ZONE));
+            set_led(true);
+            connect_wifi(std::string(GET_CFG_WIFI_SSID), std::string(GET_CFG_WIFI_PASS), std::string("UTC+0"));
         }
     } else {
+        printf("Pico\r\n");
         // LED
         gpio_init(PIN_LED);
         gpio_set_dir(PIN_LED, GPIO_OUT);
-        printf("Pico\r\n");
     }
     set_led(false);
 

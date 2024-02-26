@@ -117,7 +117,6 @@ bool config_wifi()
     // store to flash
     configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_SSID, ssid.c_str());
     configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_PASS, password.c_str());
-    configParam.setStr(ConfigParam::ParamID_t::CFG_TIME_ZONE, tz.c_str());
     configParam.finalize();
 
     return connect_wifi(ssid, password, tz);

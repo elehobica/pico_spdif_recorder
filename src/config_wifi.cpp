@@ -9,14 +9,9 @@
 #include <cstdio>
 
 #include "pico/stdlib.h"
-#include "pico/cyw43_arch.h"
-
-#include "ntp_client.h"
-#include "ConfigParam.h"
 
 static constexpr size_t STR_SIZE = 256;
 static std::string ssid, password;
-static const std::string _tz("UTC+0");
 
 static bool _get_item(const char* id, char* str, bool num_only = false)
 {
@@ -75,27 +70,7 @@ static bool _get_item(const char* id, char* str, bool num_only = false)
     return false;
 }
 
-bool connect_wifi(const std::string& ssid, const std::string& password, const int retry)
-{
-    printf("... connecting Wi-Fi\r\n");
-
-    cyw43_arch_enable_sta_mode();
-    for (int i = 0; i < retry; i++) {
-        if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), CYW43_AUTH_WPA2_AES_PSK, 10000)) {
-            printf("failed to connect: %d\r\n", i);
-            if (i < retry - 1) {
-                continue;
-            } else {
-                return false;
-            }
-        }
-    }
-    printf("connected\r\n");
-
-    return run_ntp(_tz.c_str());
-}
-
-bool config_wifi()
+bool config_wifi(std::string& ssid, std::string& password)
 {
     bool flag;
     char str[STR_SIZE] = {};
@@ -115,10 +90,5 @@ bool config_wifi()
     password = std::string(str);
     printf("Wi-Fi configured\r\n");
 
-    // store to flash
-    configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_SSID, ssid.c_str());
-    configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_PASS, password.c_str());
-    configParam.finalize();
-
-    return connect_wifi(ssid, password);
+    return true;
 }

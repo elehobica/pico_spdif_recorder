@@ -6,4 +6,6 @@
 
 #pragma once
 
-bool run_ntp(const char* tz);
+#include "pico/util/datetime.h"
+
+bool run_ntp(const char* tz, datetime_t& t_rtc);

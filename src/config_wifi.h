@@ -8,5 +8,4 @@
 
 #include <string>
 
-bool config_wifi();
-bool connect_wifi(const std::string& ssid, const std::string& password, const int retry = 3);
+bool config_wifi(std::string& ssid, std::string& password);

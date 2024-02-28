@@ -5,19 +5,19 @@
 /------------------------------------------------------*/
 
 #include <cstdio>
-#include <cstring>
 
+#include "hardware/adc.h"
+#include "hardware/rtc.h"
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
-#include "pico/util/queue.h"
-#include "hardware/adc.h"
 #include "pico/cyw43_arch.h"
+#include "pico/util/queue.h"
 
 #include "spdif_rx.h"
 #include "tf_card.h"
 #include "spdif_rec_wav.h"
-#include "ntp_client.h"
 #include "config_wifi.h"
+#include "ntp_client.h"
 #include "ConfigParam.h"
 
 bool picoW = false;
@@ -160,8 +160,8 @@ void show_help(const bits_per_sample_t bits_per_sample)
         printf(" 'w' to configure wifi (*2)\r\n");
     }
     printf(" 'h' to show this help\r\n");
-    printf("  (*1) effective while recording\r\n");
-    printf("  (*2) effective while not recording\r\n");
+    printf("  (*1) only while recording\r\n");
+    printf("  (*2) only while not recording\r\n");
     printf("---------------------------\r\n");
 }
 
@@ -260,6 +260,27 @@ void toggle_bit_resolution(bits_per_sample_t& bits_per_sample)
     }
 }
 
+bool connect_wifi(const std::string& ssid, const std::string& password, const int retry = 3)
+{
+    printf("... connecting Wi-Fi\r\n");
+
+    cyw43_arch_enable_sta_mode();
+    for (int i = 0; i < retry; i++) {
+        if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), CYW43_AUTH_WPA2_AES_PSK, 10000)) {
+            printf("failed to connect: %d\r\n", i);
+            if (i < retry - 1) {
+                continue;
+            } else {
+                return false;
+            }
+        }
+    }
+    printf("connected\r\n");
+
+    return true;
+}
+
+
 int main()
 {
     int count = 0;
@@ -268,6 +289,16 @@ int main()
     bool standby_repeat = true;
     bits_per_sample_t bits_per_sample = bits_per_sample_t::_16BITS;
     int chr;
+    // default RTC time
+    datetime_t t_rtc = {
+        .year  = static_cast<int16_t>(2024),
+        .month = static_cast<int8_t>(1),
+        .day   = static_cast<int8_t>(1),
+        .dotw  = static_cast<int8_t>(1),  // 0 is Sunday, so 5 is Friday
+        .hour  = static_cast<int8_t>(0),
+        .min   = static_cast<int8_t>(0),
+        .sec   = static_cast<int8_t>(0)
+    };
 
     stdio_init_all();
     picoW = CheckPicoW();
@@ -311,7 +342,9 @@ int main()
         // connect Wi-Fi to get time by NTP
         if (GET_CFG_WIFI_SSID[0] >= 0x20 && GET_CFG_WIFI_SSID[0] <= 0x7e && GET_CFG_WIFI_PASS[0] >= 0x20 && GET_CFG_WIFI_PASS[0] <= 0x7e) {
             set_led(true);
-            connect_wifi(std::string(GET_CFG_WIFI_SSID), std::string(GET_CFG_WIFI_PASS));
+            if (connect_wifi(std::string(GET_CFG_WIFI_SSID), std::string(GET_CFG_WIFI_PASS))) {
+                run_ntp("UTC+0", t_rtc);
+            }
         }
     } else {
         printf("Pico\r\n");
@@ -320,6 +353,10 @@ int main()
         gpio_set_dir(PIN_LED, GPIO_OUT);
     }
     set_led(false);
+
+    // RTC
+    rtc_init();
+    rtc_set_datetime(&t_rtc);
 
     // queue for Button/Switch
     queue_init(&signal_event_queue, sizeof(signal_event_t), SIGNAL_EVENT_QUEUE_LENGTH);
@@ -425,7 +462,15 @@ int main()
                     printf("suffix to rec: %03d\r\n", spdif_rec_wav::get_suffix());
                 }
             } else if (c == 'w' && picoW) {
-                config_wifi();
+                std::string ssid, password;
+                if (config_wifi(ssid, password)) {
+                    // store to flash
+                    configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_SSID, ssid.c_str());
+                    configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_PASS, password.c_str());
+                    configParam.finalize();
+                    // trial to connect Wi-Fi
+                    connect_wifi(ssid, password);
+                }
             } else if (c == 'h') {
                 show_help(bits_per_sample);
             }

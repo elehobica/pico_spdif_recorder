@@ -151,9 +151,10 @@ bool run_ntp(const char* tz, datetime_t& t_rtc)
 {
     _tz = tz;
     _got_ntp_time = false;
+    bool result = false;
 
     NTP_T *state = ntp_init();
-    if (!state) return false;
+    if (!state) return result;
 
     while (true) {
         if (absolute_time_diff_us(get_absolute_time(), state->ntp_test_time) < 0 && !state->dns_request_sent) {
@@ -184,10 +185,11 @@ bool run_ntp(const char* tz, datetime_t& t_rtc)
         cyw43_arch_wait_for_work_until(state->dns_request_sent ? at_the_end_of_time : state->ntp_test_time);
         if (_got_ntp_time) {
             t_rtc = _t_rtc;
-            return true;
+            result = true;
+            break;
         }
     }
     free(state);
 
-    return false;
+    return result;
 }

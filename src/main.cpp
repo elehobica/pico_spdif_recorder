@@ -34,6 +34,14 @@ static constexpr int NUM_SIGNAL_FILTER_STEPS = 2;  // 1 ~ 31
 static constexpr uint32_t SIGNAL_FILTER_MASK = ((1UL << NUM_SIGNAL_FILTER_STEPS) - 1);
 static constexpr int SIGNAL_EVENT_QUEUE_LENGTH = 1;
 
+enum class main_error_t {
+    WIFI_INIT_ERROR = 0,
+    WIFI_CONNECTION_ERROR,
+    TIMER_ERROR,
+    NTP_ERROR,
+    FATFS_ERROR
+};
+
 static repeating_timer_t timer;
 static uint32_t signal_history[2];
 static uint32_t signal_history_filtered_pos[2] = {0UL, 0UL};
@@ -53,7 +61,7 @@ static inline uint32_t _millis()
     return to_ms_since_boot(get_absolute_time());
 }
 
-static bool CheckPicoW()
+static bool _check_pico_w()
 {
     adc_init();
     auto dir = gpio_get_dir(29);
@@ -81,7 +89,7 @@ static bool CheckPicoW()
     }
 }
 
-void set_led(bool flag)
+static void _set_led(bool flag)
 {
     if (picoW) {
         cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, flag);
@@ -90,19 +98,19 @@ void set_led(bool flag)
     }
 }
 
-void on_stable_func(spdif_rx_samp_freq_t samp_freq)
+static void _on_stable_func(spdif_rx_samp_freq_t samp_freq)
 {
     // callback function should be returned as quick as possible
     stable_flg = true;
 }
 
-void on_lost_stable_func()
+static void _on_lost_stable_func()
 {
     // callback function should be returned as quick as possible
     lost_stable_flg = true;
 }
 
-void spdif_rx_init()
+static void _spdif_rx_init()
 {
     spdif_rx_config_t spdif_rx_config = {
         .data_pin = PIN_PICO_SPDIF_RX_DATA,
@@ -114,11 +122,11 @@ void spdif_rx_init()
     };
 
     spdif_rx_start(&spdif_rx_config);
-    spdif_rx_set_callback_on_stable(on_stable_func);
-    spdif_rx_set_callback_on_lost_stable(on_lost_stable_func);
+    spdif_rx_set_callback_on_stable(_on_stable_func);
+    spdif_rx_set_callback_on_lost_stable(_on_lost_stable_func);
 }
 
-void fatfs_config()
+static void _fatfs_config()
 {
     // FATFS configuration
     pico_fatfs_spi_config_t fatfs_spi_config = {
@@ -134,14 +142,14 @@ void fatfs_config()
     pico_fatfs_set_config(&fatfs_spi_config);
 }
 
-void spdif_rec_wav_record_process_loop()
+static void _spdif_rec_wav_record_process_loop()
 {
     core1_running = true;
     spdif_rec_wav::record_process_loop();
     core1_running = false;
 }
 
-void show_help(const bits_per_sample_t bits_per_sample)
+static void _show_help(const bits_per_sample_t bits_per_sample)
 {
     printf("---------------------------\r\n");
     printf(" bit resolution: %d bits\r\n", static_cast<int>(bits_per_sample));
@@ -165,9 +173,9 @@ void show_help(const bits_per_sample_t bits_per_sample)
     printf("---------------------------\r\n");
 }
 
-void wait_led_blink()
+static void _led_blink_during_wait()
 {
-    set_led((_millis() / 100) % 2 == 0);
+    _set_led((_millis() / 100) % 2 == 0);
     if (!queue_is_empty(&signal_event_queue)) {
         printf("can't accept any commands during background file process\r\n");
         while (!queue_is_empty(&signal_event_queue)) {
@@ -182,7 +190,7 @@ void wait_led_blink()
     sleep_ms(10);
 }
 
-bool timer_callback_scan_buttons(repeating_timer_t *rt)
+static bool _timer_callback_scan_buttons(repeating_timer_t *rt)
 {
     uint32_t signal[2] = {
         gpio_get(PIN_SWITCH_24BIT),
@@ -214,7 +222,7 @@ bool timer_callback_scan_buttons(repeating_timer_t *rt)
     return true; // keep repeating
 }
 
-void toggle_start_stop(const bits_per_sample_t bits_per_sample, bool& wait_sync, bool& user_standy, bool& standby_repeat)
+static void _toggle_start_stop(const bits_per_sample_t bits_per_sample, bool& wait_sync, bool& user_standy, bool& standby_repeat)
 {
     if (spdif_rec_wav::is_standby()) {
         if (user_standy) {
@@ -251,7 +259,7 @@ void toggle_start_stop(const bits_per_sample_t bits_per_sample, bool& wait_sync,
     }
 }
 
-void toggle_bit_resolution(bits_per_sample_t& bits_per_sample)
+static void _toggle_bit_resolution(bits_per_sample_t& bits_per_sample)
 {
     if (bits_per_sample == bits_per_sample_t::_16BITS) {
         bits_per_sample = bits_per_sample_t::_24BITS;
@@ -260,7 +268,7 @@ void toggle_bit_resolution(bits_per_sample_t& bits_per_sample)
     }
 }
 
-bool connect_wifi(const std::string& ssid, const std::string& password, const int retry = 3)
+static bool _connect_wifi(const std::string& ssid, const std::string& password, const int retry = 3)
 {
     printf("... connecting Wi-Fi\r\n");
 
@@ -280,6 +288,19 @@ bool connect_wifi(const std::string& ssid, const std::string& password, const in
     return true;
 }
 
+static void _led_disp_error(const main_error_t error, const bool forever = false)
+{
+    int n = static_cast<int>(error) + 5;  // start from blink 5 times
+    while (true) {
+        for (int i = 0; i < n*2; i++) {
+            _set_led(false);
+            sleep_ms(200);
+            if (i < n) _set_led(true);
+            sleep_ms(200);
+        }
+        if (!forever) break;
+    }
+}
 
 int main()
 {
@@ -301,7 +322,7 @@ int main()
     };
 
     stdio_init_all();
-    picoW = CheckPicoW();
+    picoW = _check_pico_w();
 
     // serial connection waiting (max 1 sec)
     while (!stdio_usb_connected() && _millis() < 1000) {
@@ -329,21 +350,26 @@ int main()
     bits_per_sample = gpio_get(PIN_SWITCH_24BIT) ? bits_per_sample_t::_16BITS : bits_per_sample_t::_24BITS;
 
     // spdif_rx initialize
-    spdif_rx_init();
+    _spdif_rx_init();
 
     // Pico / Pico W dependencies
-    // cyw43_arch_init() needs to be done after spdif_rx_init() (by unknown reason)
+    // cyw43_arch_init() needs to be done after _spdif_rx_init() (by unknown reason)
     if (picoW) {
         if (cyw43_arch_init()) {
             printf("Wi-Fi init failed\r\n");
+            _led_disp_error(main_error_t::WIFI_INIT_ERROR);
             return 1;
         }
         printf("Pico W\r\n");
         // connect Wi-Fi to get time by NTP
         if (GET_CFG_WIFI_SSID[0] >= 0x20 && GET_CFG_WIFI_SSID[0] <= 0x7e && GET_CFG_WIFI_PASS[0] >= 0x20 && GET_CFG_WIFI_PASS[0] <= 0x7e) {
-            set_led(true);
-            if (connect_wifi(std::string(GET_CFG_WIFI_SSID), std::string(GET_CFG_WIFI_PASS))) {
-                run_ntp("UTC+0", t_rtc);
+            _set_led(true);
+            if (_connect_wifi(std::string(GET_CFG_WIFI_SSID), std::string(GET_CFG_WIFI_PASS))) {
+                if (!run_ntp("UTC+0", t_rtc)) {
+                    _led_disp_error(main_error_t::NTP_ERROR);
+                }
+            } else {
+                _led_disp_error(main_error_t::WIFI_CONNECTION_ERROR);
             }
         }
     } else {
@@ -352,7 +378,7 @@ int main()
         gpio_init(PIN_LED);
         gpio_set_dir(PIN_LED, GPIO_OUT);
     }
-    set_led(false);
+    _set_led(false);
 
     // RTC
     rtc_init();
@@ -362,18 +388,19 @@ int main()
     queue_init(&signal_event_queue, sizeof(signal_event_t), SIGNAL_EVENT_QUEUE_LENGTH);
     // timer for Button/Switch
     // negative timeout means exact delay (rather than delay between callbacks)
-    if (!add_repeating_timer_us(-INTERVAL_BUTTONS_CHECK_MS * 1000, timer_callback_scan_buttons, nullptr, &timer)) {
+    if (!add_repeating_timer_us(-INTERVAL_BUTTONS_CHECK_MS * 1000, _timer_callback_scan_buttons, nullptr, &timer)) {
         printf("Failed to add timer\r\n");
+        _led_disp_error(main_error_t::TIMER_ERROR);
         return 1;
     }
 
     // FATFS config
-    fatfs_config();
+    _fatfs_config();
 
-    spdif_rec_wav::set_wait_grant_func(wait_led_blink);
+    spdif_rec_wav::set_wait_grant_func(_led_blink_during_wait);
     // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
-    multicore_launch_core1(spdif_rec_wav_record_process_loop);
+    multicore_launch_core1(_spdif_rec_wav_record_process_loop);
 
     sleep_ms(500);  // wait for FATFS to be mounted
 
@@ -382,7 +409,7 @@ int main()
 
     printf("---------------------------\r\n");
     printf("--- pico_spdif_recorder ---\r\n");
-    show_help(bits_per_sample);
+    _show_help(bits_per_sample);
 
     while (true) {
         if (!core1_running) {
@@ -412,36 +439,36 @@ int main()
             signal_event_t event;
             queue_remove_blocking(&signal_event_queue, &event);
             if (event == signal_event_t::BUTTON_PUSHED) {
-                toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
             } else if (event == signal_event_t::SWITCH_ON) {
                 if (bits_per_sample != bits_per_sample_t::_24BITS) {
-                    toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                    _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
                     bits_per_sample = bits_per_sample_t::_24BITS;
                     sleep_ms(100);
-                    toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                    _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
                 }
                 printf("bit resolution: %d bits\r\n", bits_per_sample);
             } else if (event == signal_event_t::SWITCH_OFF) {
                 if (bits_per_sample != bits_per_sample_t::_16BITS) {
-                    toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                    _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
                     bits_per_sample = bits_per_sample_t::_16BITS;
                     sleep_ms(100);
-                    toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                    _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
                 }
                 printf("bit resolution: %d bits\r\n", bits_per_sample);
             }
         } else if ((chr = getchar_timeout_us(1)) != PICO_ERROR_TIMEOUT) {
             char c = static_cast<char>(chr);
             if (c == ' ') {
-                toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
             } else if (c == 'r') {
                 if (spdif_rec_wav::is_standby() || spdif_rec_wav::is_recording()) {
-                    toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
-                    toggle_bit_resolution(bits_per_sample);
+                    _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                    _toggle_bit_resolution(bits_per_sample);
                     sleep_ms(100);
-                    toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                    _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
                 } else {
-                    toggle_bit_resolution(bits_per_sample);
+                    _toggle_bit_resolution(bits_per_sample);
                 }
                 printf("bit resolution: %d bits\r\n", bits_per_sample);
             } else if (c == 's') {
@@ -469,18 +496,22 @@ int main()
                     configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_PASS, password.c_str());
                     configParam.finalize();
                     // trial to connect Wi-Fi
-                    connect_wifi(ssid, password);
+                    if (_connect_wifi(ssid, password)) {
+                        if (run_ntp("UTC+0", t_rtc)) {
+                            rtc_set_datetime(&t_rtc);
+                        }
+                    }
                 }
             } else if (c == 'h') {
-                show_help(bits_per_sample);
+                _show_help(bits_per_sample);
             }
             // Discard any input of the rest.
             while (getchar_timeout_us(1) != PICO_ERROR_TIMEOUT) {};
         }
         if (spdif_rec_wav::is_recording()) {
-            set_led((_millis() / 500) % 2 == 0);
+            _set_led((_millis() / 500) % 2 == 0);
         } else {
-            set_led(false);
+            _set_led(false);
         }
 
         // background file process on core0
@@ -492,5 +523,8 @@ int main()
     }
 
     sleep_ms(1000);  // time to output something to serial
+
+    _led_disp_error(main_error_t::FATFS_ERROR, true);
+
     return 0;
 }

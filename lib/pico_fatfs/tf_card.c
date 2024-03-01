@@ -433,14 +433,10 @@ DRESULT disk_read (
 
 #if !FF_FS_READONLY && !FF_FS_NORTC
 /* get the current time */
-DWORD get_fattime (BYTE	fs_type)
+DWORD get_fattime (void)
 {
     datetime_t t;
     rtc_get_datetime(&t);
-
-    if (fs_type == FS_EXFAT) {
-    } else {
-    }
 
     return ((DWORD) (t.year - 1980) << 25) |
            ((DWORD) t.month         << 21) |
@@ -449,7 +445,7 @@ DWORD get_fattime (BYTE	fs_type)
            ((DWORD) t.min           <<  5) |
            ((DWORD) t.sec           >>  1); // sec /2
 }
-BYTE get_tz (BYTE	fs_type)
+BYTE get_tz (void)
 {
     return (1<<7);  // TZ: on
 }

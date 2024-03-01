@@ -1,17 +1,17 @@
-# Raspberry Pi Pico FatFs Test
+# FatFs library for Raspberry Pi Pico
 ![Scene](doc/Pico_FatFs_Test_Scene.jpg)
 
 ## Overview
-This project is an implementation example of FatFs on Raspberry Pi Pico.
-This project supports:
-* FatFs R0.14b ([http://elm-chan.org/fsw/ff/00index_e.html](http://elm-chan.org/fsw/ff/00index_e.html))
+FatFs library on Raspberry Pi Pico.
+This library supports:
+* FatFs R0.15 ([http://elm-chan.org/fsw/ff/00index_e.html](http://elm-chan.org/fsw/ff/00index_e.html))
 * SD card access by SPI interface
 * SD, SDHC, SDXC cards
 * FAT16, FAT32, exFAT formats
-* write / read speed benchmark
+* test code for write / read speed benchmark
 
 ## Supported Board
-* Raspberry Pi Pico
+* Raspberry Pi Pico and Raspberry Pi Pico W
 
 ## Ciruit Diagram
 ![Circuit Diagram](doc/Pico_FatFs_Test_Schematic.png)
@@ -29,7 +29,6 @@ This project supports:
 | 36 | 3V3(OUT) | 3.3V | VDD (4) | 3V3 |
 
 #### Caution
-* SPI0_TX and SPI0_RX needs to be pull-ed up with 10Kohm.
 * Wire length between Pico and SD card is very sensitive. Short wiring as possible is desired, otherwise errors such as Mount error, Preallocation error and Write fail will occur.
 
 ### Serial (CP2102 module)
@@ -41,16 +40,18 @@ This project supports:
 
 ## How to build
 * See ["Getting started with Raspberry Pi Pico"](https://datasheets.raspberrypi.org/pico/getting-started-with-pico.pdf)
-* Put "pico-sdk", "pico-examples" (, "pico-extras" and "pico-playground") on the same level with this project folder.
+* Put "pico-sdk", "pico-examples" and "pico-extras" on the same level with this project folder.
+* Set environmental variables for PICO_SDK_PATH, PICO_EXTRAS_PATH and PICO_EXAMPLES_PATH
 * Build is confirmed in Developer Command Prompt for VS 2022 and Visual Studio Code on Windows enviroment
-* Confirmed with Pico SDK 1.4.0, cmake-3.27.2-windows-x86_64 and gcc-arm-none-eabi-10.3-2021.10-win32
-* Set directory paths of "pico-sdk" and "pico-extras" to environment variables: PICO_SDK_PATH and PICO_EXTRAS_PATH
+* Confirmed with Pico SDK 1.5.1, cmake-3.27.2-windows-x86_64 and gcc-arm-none-eabi-10.3-2021.10-win32
 ```
-> git clone -b master https://github.com/raspberrypi/pico-sdk.git
+> git clone -b 1.5.1 https://github.com/raspberrypi/pico-sdk.git
 > cd pico-sdk
 > git submodule update -i
 > cd ..
-> git clone -b master https://github.com/raspberrypi/pico-examples.git
+> git clone -b sdk-1.5.1 https://github.com/raspberrypi/pico-examples.git
+>
+> git clone -b sdk-1.5.1 https://github.com/raspberrypi/pico-extras.git
 > 
 > git clone -b main https://github.com/elehobica/pico_fatfs.git
 ```
@@ -64,33 +65,55 @@ This project supports:
 ```
 * Put "pico_fatfs_test.uf2" on RPI-RP2 drive
 
-## Customize IO buffer init
-By default, void init_spi() in tf_card.c runs for IO buffer initialization. User can re-define to customize it when needed.
+## Configuration
+Configure clock and pin settings by `pico_fatfs_set_config()` with `pico_fatfs_spi_config_t`
 
-in C++ code (main.cpp)
+```
+  pico_fatfs_spi_config_t config = {
+      spi0,                   // spi_inst
+      CLK_SLOW_DEFAULT,       // clk_slow
+      CLK_FAST_DEFAULT,       // clk_fast
+      PIN_SPI0_MISO_DEFAULT,  // pin_miso
+      PIN_SPI0_CS_DEFAULT,    // pin_cs
+      PIN_SPI0_SCK_DEFAULT,   // pin_sck
+      PIN_SPI0_MOSI_DEFAULT,  // pin_mosi
+      true                    // pullup
+  };
+  pico_fatfs_set_config(&config);
+```
+
+### Clock confguration
+* By default, `clk_slow` is set to `100 * KHZ` and `clk_fast` is set to `50 * MHZ`.
+* The actual SPI clock frequency is set to clk_peri / N = 125.0 MHz / N, which is determined by spi_set_baudrate() in ['pico-sdk/src/rp2_common/hardware_spi/spi.c'](https://github.com/raspberrypi/pico-sdk/blob/2062372d203b372849d573f252cf7c6dc2800c0a/src/rp2_common/hardware_spi/spi.c#L41).
+* Thus, to choose actually slower clock as `clk_fast`, smaller value than 31.25 MHz should be configured.
+
+### Pin assignment
+* Choose `spi0` or `spi1` and designate corresponding pin assignment for `pin_miso`, `pin_cs`, `pin_sck` and `pin_mosi`.
+* Pin selection must follow pin assignment rule defined by `spi0` or `spi1`. See comments PIN_SPIx_XXX_DEFAULT in [tf_card.h](tf_card.h).
+
+### Pullup option
+* set `true` for MISO, MOSI to use internal pullup. (recommended)
+* set `false` for MISO, MOSI when external pullup resistors attached. [external pullup](doc/Pico_FatFs_Test_Schematic_w_pullup.png)
+
+### Other customization for pin configuration
+By default, `void pico_fatfs_init_spi()` in [tf_card.c](tf_card.c) runs for IO buffer initialization. User can override it by the re-definition to get more detail IO buffer configuration. However, the customizations such as slew rate and/or drive strength rarely improve the timing problem of SPI interface, therefore, physical approach such as shorter wiring would be recommended.
+
+in C++ code (e.g. main.cpp)
 ```
 extern "C" {
-void init_spi(void)
+void pico_fatfs_init_spi(void)
 {
   ...
 }
 }
 ```
-or in C code
+or in C code (e.g. main.c)
 ```
-void init_spi(void)
+void pico_fatfs_init_spi(void)
 {
   ...
 }
 ```
-
-## Configuration Tips
-### CLK_FAST
-```
-#define CLK_FAST_DEFAULT    (50 * MHZ)
-```
- SPI fast clock frequency is set to 50MHz as default. However, it could need to be reduced to around 20MHz~ depending on SD card and SPI wiring condition.
- The actual SPI clock frequency is set to clk_peri (= 125.0 MHz) / N, which is determined by spi_set_baudrate() in ['pico-sdk/src/rp2_common/hardware_spi/spi.c'](https://github.com/raspberrypi/pico-sdk/blob/2062372d203b372849d573f252cf7c6dc2800c0a/src/rp2_common/hardware_spi/spi.c#L41).
 
 ## Benchmark Result (CLK_FAST = 50 MHz)
 * Memorex microSD 2GB

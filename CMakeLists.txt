@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
+set(PICO_BOARD "pico_w")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -15,8 +16,10 @@ pico_sdk_init()
 add_subdirectory(lib/pico_spdif_rx)
 add_subdirectory(lib/pico_spdif_rx/samples/lib/pico_audio_32b) # for extended audio.h
 add_subdirectory(lib/pico_fatfs)
+add_subdirectory(lib/pico_ntp_client)
+add_subdirectory(lib/config_wifi)
+add_subdirectory(lib/picoConfigParam)
 
-# select sample application here (choose only one)
 add_executable(${PROJECT_NAME}
     src/main.cpp
     src/spdif_rec_wav.cpp
@@ -25,11 +28,21 @@ add_executable(${PROJECT_NAME}
     src/wav_file.cpp
 )
 
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+    $ENV{PICO_EXAMPLES_PATH}/pico_w/wifi/
+)
+
 target_link_libraries(${PROJECT_NAME}
+    hardware_adc
+    hardware_rtc
     pico_stdlib
     pico_multicore
-    spdif_rx
+    pico_spdif_rx
     pico_fatfs
+    pico_ntp_client
+    config_wifi
+    picoConfigParam
 )
 
 pico_enable_stdio_usb(${PROJECT_NAME} 1)

@@ -353,7 +353,8 @@ TCHAR* f_gets (TCHAR* buff, int len, FIL* fp);						/* Get a string from the fil
 
 /* RTC function */
 #if !FF_FS_READONLY && !FF_FS_NORTC
-DWORD get_fattime (void);
+DWORD get_fattime (BYTE fs_type);
+BYTE get_tz (BYTE fs_type);
 #endif
 
 /* LFN support functions */

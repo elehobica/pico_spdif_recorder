@@ -16,6 +16,9 @@ pico_sdk_init()
 add_subdirectory(lib/pico_spdif_rx)
 add_subdirectory(lib/pico_spdif_rx/samples/lib/pico_audio_32b) # for extended audio.h
 add_subdirectory(lib/pico_fatfs)
+add_subdirectory(lib/pico_ntp_client)
+add_subdirectory(lib/config_wifi)
+add_subdirectory(lib/picoConfigParam)
 
 add_executable(${PROJECT_NAME}
     src/main.cpp
@@ -23,32 +26,23 @@ add_executable(${PROJECT_NAME}
     src/wav_file_status.cpp
     src/wav_file_cmd.cpp
     src/wav_file.cpp
-    src/ntp_client.cpp
-    src/config_wifi.cpp
-    src/UserFlash.cpp
-    src/ConfigParam.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
     $ENV{PICO_EXAMPLES_PATH}/pico_w/wifi/
-    $ENV{PICO_EXAMPLES_PATH}/pico_w/wifi/ntp_client
 )
 
 target_link_libraries(${PROJECT_NAME}
-    pico_stdlib
-    hardware_rtc
     hardware_adc
-    hardware_exception
-    pico_flash
+    hardware_rtc
+    pico_stdlib
     pico_multicore
-    pico_cyw43_arch_lwip_poll
     pico_spdif_rx
     pico_fatfs
-)
-
-target_compile_definitions(${PROJECT_NAME} PRIVATE
-    PICO_FLASH_ASSUME_CORE1_SAFE
+    pico_ntp_client
+    config_wifi
+    picoConfigParam
 )
 
 pico_enable_stdio_usb(${PROJECT_NAME} 1)

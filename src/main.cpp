@@ -9,6 +9,7 @@
 #include "hardware/adc.h"
 #include "hardware/rtc.h"
 #include "pico/stdlib.h"
+#include "pico/flash.h"
 #include "pico/multicore.h"
 #include "pico/cyw43_arch.h"
 #include "pico/util/queue.h"
@@ -35,11 +36,12 @@ static constexpr uint32_t SIGNAL_FILTER_MASK = ((1UL << NUM_SIGNAL_FILTER_STEPS)
 static constexpr int SIGNAL_EVENT_QUEUE_LENGTH = 1;
 
 enum class main_error_t {
-    WIFI_INIT_ERROR = 0,
+    CYW43_INIT_ERROR = 0,
     WIFI_CONNECTION_ERROR,
     TIMER_ERROR,
     NTP_ERROR,
-    FATFS_ERROR
+    FATFS_ERROR,
+    FLASH_PROGRAM_ERROR
 };
 
 static repeating_timer_t timer;
@@ -145,6 +147,7 @@ static void _fatfs_config()
 static void _spdif_rec_wav_record_process_loop()
 {
     core1_running = true;
+    flash_safe_execute_core_init();  // no access to flash on core1
     spdif_rec_wav::record_process_loop();
     core1_running = false;
 }
@@ -355,9 +358,9 @@ int main()
     // Pico / Pico W dependencies
     // cyw43_arch_init() needs to be done after _spdif_rx_init() (by unknown reason)
     if (picoW) {
-        if (cyw43_arch_init()) {
-            printf("Wi-Fi init failed\r\n");
-            _led_disp_error(main_error_t::WIFI_INIT_ERROR);
+        if (cyw43_arch_init()) {  // this is needed for driving LED
+            printf("cyw43 init failed\r\n");
+            _led_disp_error(main_error_t::CYW43_INIT_ERROR);
             return 1;
         }
         printf("Pico W\r\n");
@@ -366,11 +369,15 @@ int main()
             _set_led(true);
             if (_connect_wifi(std::string(GET_CFG_WIFI_SSID), std::string(GET_CFG_WIFI_PASS))) {
                 if (!run_ntp("UTC+0", t_rtc)) {
+                    printf("ERROR: failed NTP sync\r\n");
                     _led_disp_error(main_error_t::NTP_ERROR);
                 }
             } else {
+                printf("ERROR: failed Wi-Fi connection: %s\r\n", GET_CFG_WIFI_SSID);
                 _led_disp_error(main_error_t::WIFI_CONNECTION_ERROR);
             }
+        } else {
+            printf("No Wi-Fi SSID information. Skip Wi-Fi connection for NTP\r\n");
         }
     } else {
         printf("Pico\r\n");
@@ -494,12 +501,16 @@ int main()
                     // store to flash
                     configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_SSID, ssid.c_str());
                     configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_PASS, password.c_str());
-                    configParam.finalize();
-                    // trial to connect Wi-Fi
-                    if (_connect_wifi(ssid, password)) {
-                        if (run_ntp("UTC+0", t_rtc)) {
-                            rtc_set_datetime(&t_rtc);
+                    if (configParam.finalize()) {
+                        // trial to connect Wi-Fi
+                        if (_connect_wifi(ssid, password)) {
+                            if (run_ntp("UTC+0", t_rtc)) {
+                                rtc_set_datetime(&t_rtc);
+                            }
                         }
+                    } else {
+                        printf("ERROR: failed to program flash\r\n");
+                        _led_disp_error(main_error_t::FLASH_PROGRAM_ERROR);
                     }
                 }
             } else if (c == 'h') {

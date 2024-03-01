@@ -217,14 +217,14 @@ void ConfigParamUser::initialize(LoadBehavior loadDefaultBehavior)
     }
 }
 
-void ConfigParamUser::finalize()
+bool ConfigParamUser::finalize()
 {
     // store to Flash
     for (int i = 0; i < _numParams; i++) {
         ParamItem_t *item = &configParamItems[i];
         userFlash.writeReserve(item->flashAddr, item->size, item->ptr);
     }
-    userFlash.program();
+    return userFlash.program();
 }
 
 void ConfigParamUser::read(uint32_t id, void *ptr)

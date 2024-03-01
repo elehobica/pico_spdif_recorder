@@ -78,7 +78,7 @@ namespace ConfigParam
         void printInfo();
         void initialize(LoadBehavior loadDefaultBehavior = LoadBehavior::LOAD_DEFAULT_IF_FLASH_IS_BLANK);
         void incBootCount();
-        void finalize();
+        bool finalize();
         void read(uint32_t id, void *ptr);
         void write(uint32_t id, const void *ptr);
         bool getBool(uint32_t id);

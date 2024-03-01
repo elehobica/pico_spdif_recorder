@@ -59,14 +59,15 @@ void UserFlash::writeReserve(uint32_t flash_ofs, size_t size, const void *buf)
     }
 }
 
-void UserFlash::program()
+bool UserFlash::program()
 {
     // Need to stop interrupt during erase and program
     // noted that if core1 is running, it must be stopped also if accessing flash
     int result = flash_safe_execute(_user_flash_program_core, this, 100);
     if (result != PICO_OK) {
-        printf("ERROR: failed to program UserFlash\n");
+        return false;
     }
+    return true;
 }
 
 void UserFlash::_program_core()

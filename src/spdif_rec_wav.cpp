@@ -9,7 +9,6 @@
 #include <cstring>
 #include <cstdarg>
 
-#include "fatfs/ff.h"
 #include "wav_file_status.h"
 #include "wav_file_cmd.h"
 
@@ -112,7 +111,6 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
     _clear_log = true;
 
     // Local variables for this loop
-    FATFS fs;
     uint32_t sample_freq;
     bits_per_sample_t bits_per_sample = bits_per_sample_t::_16BITS;
     wav_file_status prev = wav_file_status(wav_file_status::status_t::FINALIZED);
@@ -121,14 +119,6 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
     uint32_t* buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
     int buf_accum = 0;
     int last_buf_id = 0;
-
-    // Mount FATFS
-    FRESULT fr = f_mount(&fs, "", 1);
-    if (fr != FR_OK) {
-        printf("FATFS mount error %d\r\n", fr);
-        return;
-    }
-    printf("FATFS mount ok\r\n");
 
     _suffix = _get_last_suffix() + 1;  // initial suffix to start from 1
     sprintf(_log_filename, "%s%03d.txt", log_prefix, _suffix);

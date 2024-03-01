@@ -14,8 +14,9 @@
 #include "pico/cyw43_arch.h"
 #include "pico/util/queue.h"
 
-#include "spdif_rx.h"
 #include "tf_card.h"
+#include "fatfs/ff.h"
+#include "spdif_rx.h"
 #include "spdif_rec_wav.h"
 #include "config_wifi.h"
 #include "ntp_client.h"
@@ -41,7 +42,8 @@ enum class main_error_t {
     TIMER_ERROR,
     NTP_ERROR,
     FATFS_ERROR,
-    FLASH_PROGRAM_ERROR
+    FLASH_PROGRAM_ERROR,
+    MAIN_LOOP_ABORTED_ERROR
 };
 
 static repeating_timer_t timer;
@@ -128,7 +130,7 @@ static void _spdif_rx_init()
     spdif_rx_set_callback_on_lost_stable(_on_lost_stable_func);
 }
 
-static void _fatfs_config()
+static bool _fatfs_init()
 {
     // FATFS configuration
     pico_fatfs_spi_config_t fatfs_spi_config = {
@@ -142,12 +144,31 @@ static void _fatfs_config()
         true  // use internal pullup
     };
     pico_fatfs_set_config(&fatfs_spi_config);
+
+    // Mount FATFS
+    FATFS fs;
+    FRESULT fr = f_mount(&fs, "", 1);
+    if (fr != FR_OK) {
+        printf("FATFS mount error %d\r\n", fr);
+        return false;
+    }
+    printf("FATFS mount ok\r\n");
+
+    // Print card info
+    const char* format = (fs.fs_type == FS_FAT12) ? "FAT12" :
+                         (fs.fs_type == FS_FAT16) ? "FAT16" :
+                         (fs.fs_type == FS_FAT32) ? "FAT32" :
+                         (fs.fs_type == FS_EXFAT) ? "exFAT" : "unknown format";
+    printf("Card info: %s %7.2f GB (GB = 1E9 Bytes)\n\n", format, fs.csize * fs.n_fatent * 512E-9);
+
+    return true;
 }
 
-static void _spdif_rec_wav_record_process_loop()
+static void _core1_process()
 {
     core1_running = true;
     flash_safe_execute_core_init();  // no access to flash on core1
+
     spdif_rec_wav::record_process_loop();
     core1_running = false;
 }
@@ -401,13 +422,16 @@ int main()
         return 1;
     }
 
-    // FATFS config
-    _fatfs_config();
+    // FATFS initialize
+    if (!_fatfs_init()) {
+        _led_disp_error(main_error_t::FATFS_ERROR, true);
+        return 1;
+    }
 
     spdif_rec_wav::set_wait_grant_func(_led_blink_during_wait);
     // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
-    multicore_launch_core1(_spdif_rec_wav_record_process_loop);
+    multicore_launch_core1(_core1_process);
 
     sleep_ms(500);  // wait for FATFS to be mounted
 
@@ -535,7 +559,7 @@ int main()
 
     sleep_ms(1000);  // time to output something to serial
 
-    _led_disp_error(main_error_t::FATFS_ERROR, true);
+    _led_disp_error(main_error_t::MAIN_LOOP_ABORTED_ERROR, true);
 
     return 0;
 }

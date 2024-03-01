@@ -360,7 +360,7 @@ int main()
     if (picoW) {
         if (cyw43_arch_init()) {  // this is needed for driving LED
             printf("cyw43 init failed\r\n");
-            _led_disp_error(main_error_t::CYW43_INIT_ERROR);
+            _led_disp_error(main_error_t::CYW43_INIT_ERROR, true);
             return 1;
         }
         printf("Pico W\r\n");
@@ -397,7 +397,7 @@ int main()
     // negative timeout means exact delay (rather than delay between callbacks)
     if (!add_repeating_timer_us(-INTERVAL_BUTTONS_CHECK_MS * 1000, _timer_callback_scan_buttons, nullptr, &timer)) {
         printf("Failed to add timer\r\n");
-        _led_disp_error(main_error_t::TIMER_ERROR);
+        _led_disp_error(main_error_t::TIMER_ERROR, true);
         return 1;
     }
 

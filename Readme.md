@@ -9,7 +9,7 @@
 * Recording only, no monitoring or playback functions
 
 ## Supported Board and Peripheral Devices
-* Raspberry Pi Pico (rp2040)
+* Raspberry Pi Pico or Raspberry Pi Pico W (rp2040)
 * S/PDIF Coaxial or TOSLINK Rx module (DLR1160 or equivalent)
 * microSD cards (recommend SD-XC, V30 cards)
 
@@ -82,6 +82,7 @@ Note:
 | b | Auto blank split on/off (default: on) |
 | v | Verbose for monitoring messages |
 | c | Clear WAV file suffix to 1 |
+| w | Configure Wi-Fi (for Raspberry Pi Pico W only) |
 | h | Help |
 
 ### Recording start/stop/split features
@@ -93,8 +94,10 @@ Note:
 ### LED indicator
 * Slow blink: Recording is on-going.
 * Fast blink: Background file proceses to close previous file and prepare next file are on-going. During this term, no command requests can be accepted.
+* Repeated Slow blink and Fast blink: indicating errors (see log on serial console.)
 
-## microSD card recommendation
+## microSD card
+### Card recommendation for Hi-Res recording
 * Due to the limitation of single bit SPI interface driven by Raspberry Pi Pico, even with highest class microSD cards (as of 2024), recording in 24bit 176.4 KHz or 192.0 KHz is challenging. It will sometimes causes the drops of audio sampling data. The bandwidth status can be monitored in Verbose mode.
 * With following recommended microSD cards, recording in 24bit 96.0 KHz will be stable as far as experimentally confirmed.
 * Format micorSD card in exFAT with [official SD Card Formatter](https://www.sdcard.org/downloads/formatter/) before usage. 
@@ -105,3 +108,9 @@ Note:
 | 2 | SanDisk | Extreme PRO 256GB | SDSQXCD-256G-GN6MA | 24bit/192KHz is too challenging. 24bit/96KHz is stable. |
 
 <img src="doc/samsung-pro-plus-256gb.jpg" width="80" />  <img src="doc/sandisk-extreme-pro-256gb.jpg" width="80" />
+
+### File timestamp
+* File timestamp is synchronized to NTP if using Raspberry Pi Pico W and connected to Wi-Fi.
+* Otherwise, timestamp starts from 0:00 a.m. Jan. 1st, 2024 (UTC+0).
+* exFAT format (thus, > 64GB SD-XC cards) is recommended to reflect timezone.
+* In case of FAT32 format, timestamp cannot reflect timezone, therefore, it's always shown as UTC+0 time.

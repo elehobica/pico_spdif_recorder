@@ -15,7 +15,7 @@
 #include "pico/util/queue.h"
 
 #include "tf_card.h"
-#include "fatfs/ff.h"
+#include "ff.h"
 #include "spdif_rx.h"
 #include "spdif_rec_wav.h"
 #include "config_wifi.h"

@@ -8,7 +8,7 @@
 
 #include <string>
 
-#include "fatfs/ff.h"
+#include "ff.h"
 #include "spdif_rec_wav.h"
 
 class wav_file
@@ -40,7 +40,7 @@ protected:
     static constexpr const char* WAV_PREFIX = "record_";
     static constexpr int WAV_HEADER_SIZE = 44;
     static constexpr uint32_t MAX_TOTAL_BYTES = 0xfff00000;  // max total bytes of wav data to avoid 32bit overflow
-    static constexpr uint32_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB
+    static constexpr int64_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB
 
     // === Private class functions ===
 
@@ -49,7 +49,7 @@ protected:
 
     // === Private member functions ===
     // functions called from core0
-    FRESULT _stepwise_seek(DWORD target_pos);
+    FRESULT _stepwise_seek(const DWORD pos);
     // functions called from core1
     uint32_t _write_core(const uint32_t* buff, const uint32_t sub_frame_count);
 

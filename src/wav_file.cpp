@@ -270,7 +270,7 @@ uint32_t wav_file::write(const uint32_t* buff, const uint32_t sub_frame_count)
     _total_time_us += t_us;
     _data_written = true;
 
-    // force immidiate split to avoid 32bit file size overflow
+    // force immediate split to avoid 32bit file size overflow
     if (_total_bytes > MAX_TOTAL_BYTES) {
         spdif_rec_wav::split_recording(_bits_per_sample);
         spdif_rec_wav::log_printf("force immediate wav split due to file size\r\n");
@@ -324,12 +324,13 @@ bool wav_file::is_data_written()
 /*-----------------------------/
 /  Protected Member functions
 /-----------------------------*/
-FRESULT wav_file::_stepwise_seek(DWORD target_pos)
+FRESULT wav_file::_stepwise_seek(const DWORD pos)
 {
     FRESULT fr;     /* FatFs return code */
 
-    DWORD cur_pos = _wrap_f_tell(&_fil);
-    int64_t diff = static_cast<int64_t>(target_pos) - cur_pos;
+    int64_t target_pos = static_cast<int64_t>(pos);
+    int64_t cur_pos    = static_cast<int64_t>(_wrap_f_tell(&_fil));
+    int64_t diff       = target_pos - cur_pos;
 
     while (cur_pos != target_pos) {
         if (diff >= 0) {
@@ -345,7 +346,7 @@ FRESULT wav_file::_stepwise_seek(DWORD target_pos)
                 cur_pos = target_pos;
             }
         }
-        fr = _wrap_f_lseek(&_fil, cur_pos);
+        fr = _wrap_f_lseek(&_fil, static_cast<DWORD>(cur_pos));
         if (fr != FR_OK) break;
     }
     return fr;

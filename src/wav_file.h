@@ -29,9 +29,9 @@ public:
     uint32_t write(const uint32_t* buff, const uint32_t sub_frame_count);
     void set_truncate(const float sec);
     void record_queue_ratio(float queue_ratio);
-    void report_start();
-    void report_final();
-    bool is_data_written();
+    void report_start() const;
+    void report_final() const;
+    bool is_data_written() const;
 
 protected:
     // === Private class constants ===

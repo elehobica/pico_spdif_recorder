@@ -44,7 +44,7 @@ public:
     void prepare(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     void finalize(const bool report_flag, const float truncate_sec = 0.0f);
     void set_status(status_t status);
-    bool is_status(status_t status);
+    bool is_equal_status(status_t status) const;
     void wait_status(status_t status);
     // functions called from core1
     void reset();

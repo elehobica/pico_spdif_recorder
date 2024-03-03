@@ -179,7 +179,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 }
             }
 
-            if (next.is_status(wav_file_status::status_t::RESET)) {
+            if (next.is_equal_status(wav_file_status::status_t::RESET)) {
                 next.req_prepare(_suffix, sample_freq, bits_per_sample);
             }
             next.wait_status(wav_file_status::status_t::PREPARED);
@@ -235,7 +235,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                         cur.record_queue_ratio(static_cast<float>(queue_level) / SPDIF_QUEUE_LENGTH);
                     }
                 } else if (queue_level < NUM_SUB_FRAME_BUF/4) {
-                    if (cur.is_data_written() && next.is_status(wav_file_status::status_t::RESET)) {
+                    if (cur.is_data_written() && next.is_equal_status(wav_file_status::status_t::RESET)) {
                         // prepare next file
                         next.req_prepare(_suffix + 1, sample_freq, bits_per_sample);
                     }

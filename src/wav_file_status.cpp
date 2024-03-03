@@ -76,7 +76,7 @@ void wav_file_status::set_status(status_t status)
     _status = status;
 }
 
-bool wav_file_status::is_status(status_t status)
+bool wav_file_status::is_equal_status(status_t status) const
 {
     return _status == status;
 }

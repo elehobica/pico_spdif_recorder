@@ -289,12 +289,12 @@ void wav_file::record_queue_ratio(float queue_ratio)
     if (queue_ratio > _worst_queue_ratio) _worst_queue_ratio = queue_ratio;
 }
 
-void wav_file::report_start()
+void wav_file::report_start() const
 {
     spdif_rec_wav::log_printf("recording start \"%s\" @ %d bits %5.1f KHz (bitrate: %6.1f Kbps)\r\n", _filename.c_str(), _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3);
 }
 
-void wav_file::report_final()
+void wav_file::report_final() const
 {
     float total_sec_f = static_cast<float>(_total_bytes) / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS / _sample_freq - _truncate_sec;
     uint32_t total_sec = static_cast<uint32_t>(total_sec_f);
@@ -312,7 +312,7 @@ void wav_file::report_final()
     }
 }
 
-bool wav_file::is_data_written()
+bool wav_file::is_data_written() const
 {
     return _data_written;
 }

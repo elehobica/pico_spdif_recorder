@@ -117,4 +117,4 @@ Note:
 * In case of FAT32 format, timestamp cannot reflect timezone, therefore, it's always shown as UTC+0 time.
 
 ### Card trouble shooting
-* In case of card mount error or fundamental access errors, please confirm with [FatFs test](lib/pico_fatfs/Readme.md)
+* In case of card mount error or fundamental access errors, please confirm with [FatFs test](lib/pico_fatfs_customized/test)

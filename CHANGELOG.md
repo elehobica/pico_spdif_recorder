@@ -18,5 +18,5 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
 * Fix bug for seek position in case of large size file when closing file
 
-## [v1.0.0] - 2024-02-12
+## [1.0.0] - 2024-02-12
 * Initial release

@@ -24,6 +24,6 @@ target_link_libraries(${PROJECT_NAME}
     hardware_adc
     pico_stdlib
     pico_cyw43_arch_none
-    pico_fatfs
+    pico_fatfs_customized
 )
 pico_add_extra_outputs(${PROJECT_NAME})

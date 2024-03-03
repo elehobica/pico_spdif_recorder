@@ -15,7 +15,7 @@ pico_sdk_init()
 
 add_subdirectory(lib/pico_spdif_rx)
 add_subdirectory(lib/pico_spdif_rx/samples/lib/pico_audio_32b) # for extended audio.h
-add_subdirectory(lib/pico_fatfs)
+add_subdirectory(lib/pico_fatfs_customized)
 add_subdirectory(lib/pico_ntp_client)
 add_subdirectory(lib/config_wifi)
 add_subdirectory(lib/picoConfigParam)
@@ -39,7 +39,7 @@ target_link_libraries(${PROJECT_NAME}
     pico_stdlib
     pico_multicore
     pico_spdif_rx
-    pico_fatfs
+    pico_fatfs_customized
     pico_ntp_client
     config_wifi
     picoConfigParam

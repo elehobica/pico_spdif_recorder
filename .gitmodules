@@ -1,3 +1,6 @@
 [submodule "lib/pico_spdif_rx"]
 	path = lib/pico_spdif_rx
 	url = git@github.com:elehobica/pico_spdif_rx.git
+[submodule "lib/pico_fatfs_customized/pico_fatfs"]
+	path = lib/pico_fatfs_customized/pico_fatfs
+	url = git@github.com:elehobica/pico_fatfs.git

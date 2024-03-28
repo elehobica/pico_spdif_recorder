@@ -31,11 +31,6 @@ static constexpr uint8_t PIN_PICO_SPDIF_RX_DATA = 15;
 static constexpr uint PIN_SWITCH_24BIT      = 6;
 static constexpr uint PIN_BUTTON_START_STOP = 7;
 
-static constexpr int INTERVAL_BUTTONS_CHECK_MS = 50;
-static constexpr int NUM_SIGNAL_FILTER_STEPS = 2;  // 1 ~ 31
-static constexpr uint32_t SIGNAL_FILTER_MASK = ((1UL << NUM_SIGNAL_FILTER_STEPS) - 1);
-static constexpr int SIGNAL_EVENT_QUEUE_LENGTH = 1;
-
 enum class main_error_t {
     CYW43_INIT_ERROR = 0,
     WIFI_CONNECTION_ERROR,
@@ -47,15 +42,20 @@ enum class main_error_t {
 };
 
 static repeating_timer_t timer;
-static uint32_t signal_history[2];
-static uint32_t signal_history_filtered_pos[2] = {0UL, 0UL};
-static uint32_t signal_history_filtered_neg[2] = {~0UL, ~0UL};
+static constexpr int INTERVAL_BUTTONS_CHECK_MS = 50;
+static constexpr int NUM_SIGNAL_FILTER_STEPS = 2;  // 1 ~ 31
+static constexpr uint32_t SIGNAL_FILTER_MASK = ((1UL << NUM_SIGNAL_FILTER_STEPS) - 1);
+static constexpr int NUM_SIGNALS = 2;
+static uint32_t signal_history[NUM_SIGNALS];
+static uint32_t signal_history_filtered_pos[NUM_SIGNALS] = {0UL, 0UL};
+static uint32_t signal_history_filtered_neg[NUM_SIGNALS] = {~0UL, ~0UL};
+
 static bool core1_running = false;
 volatile static bool stable_flg = false;
 volatile static bool lost_stable_flg = false;
-static queue_t signal_event_queue;
 enum class signal_event_t {
-    BUTTON_PUSHED = 0,
+    NONE = 0,
+    BUTTON_PUSHED,
     SWITCH_ON,
     SWITCH_OFF
 };
@@ -200,13 +200,6 @@ static void _show_help(const bits_per_sample_t bits_per_sample)
 static void _led_blink_during_wait()
 {
     _set_led((_millis() / 100) % 2 == 0);
-    if (!queue_is_empty(&signal_event_queue)) {
-        printf("can't accept any commands during background file process\r\n");
-        while (!queue_is_empty(&signal_event_queue)) {
-            signal_event_t event;
-            queue_remove_blocking(&signal_event_queue, &event);
-        }
-    }
     if (getchar_timeout_us(1) != PICO_ERROR_TIMEOUT) {
         printf("can't accept any commands during background file process\r\n");
         while (getchar_timeout_us(1) != PICO_ERROR_TIMEOUT) {};  // Discard any input.
@@ -214,13 +207,14 @@ static void _led_blink_during_wait()
     sleep_ms(10);
 }
 
-static bool _timer_callback_scan_buttons(repeating_timer_t *rt)
+static signal_event_t _scan_buttons()
 {
-    uint32_t signal[2] = {
+    signal_event_t event;
+    uint32_t signal[NUM_SIGNALS] = {
         gpio_get(PIN_SWITCH_24BIT),
         gpio_get(PIN_BUTTON_START_STOP)
     };
-    for (int i = 0; i < sizeof(signal_history) / sizeof(uint32_t); i++) {
+    for (int i = 0; i < NUM_SIGNALS; i++) {
         signal_history[i] = (signal_history[i] << 1) | (signal[i] & 0b1);
         if ((signal_history[i] & SIGNAL_FILTER_MASK) == SIGNAL_FILTER_MASK) {
             signal_history_filtered_pos[i] = (signal_history_filtered_pos[i] << 1) | 0b1;
@@ -234,16 +228,15 @@ static bool _timer_callback_scan_buttons(repeating_timer_t *rt)
         }
     }
     if ((signal_history_filtered_pos[0] & 0b11) == 0b10) {
-        signal_event_t event = signal_event_t::SWITCH_ON;
-        queue_try_add(&signal_event_queue, &event);
+        event = signal_event_t::SWITCH_ON;
     } else if ((signal_history_filtered_neg[0] & 0b11) == 0b01) {
-        signal_event_t event = signal_event_t::SWITCH_OFF;
-        queue_try_add(&signal_event_queue, &event);
+        event = signal_event_t::SWITCH_OFF;
     } else if ((signal_history_filtered_pos[1] & 0b11) == 0b10) {
-        signal_event_t event = signal_event_t::BUTTON_PUSHED;
-        queue_try_add(&signal_event_queue, &event);
+        event = signal_event_t::BUTTON_PUSHED;
+    } else {
+        event = signal_event_t::NONE;
     }
-    return true; // keep repeating
+    return event;
 }
 
 static void _toggle_start_stop(const bits_per_sample_t bits_per_sample, bool& wait_sync, bool& user_standy, bool& standby_repeat)
@@ -412,16 +405,6 @@ int main()
     rtc_init();
     rtc_set_datetime(&t_rtc);
 
-    // queue for Button/Switch
-    queue_init(&signal_event_queue, sizeof(signal_event_t), SIGNAL_EVENT_QUEUE_LENGTH);
-    // timer for Button/Switch
-    // negative timeout means exact delay (rather than delay between callbacks)
-    if (!add_repeating_timer_us(-INTERVAL_BUTTONS_CHECK_MS * 1000, _timer_callback_scan_buttons, nullptr, &timer)) {
-        printf("Failed to add timer\r\n");
-        _led_disp_error(main_error_t::TIMER_ERROR, true);
-        return 1;
-    }
-
     // FATFS initialize
     if (!_fatfs_init()) {
         _led_disp_error(main_error_t::FATFS_ERROR, true);
@@ -466,28 +449,33 @@ int main()
                 user_standy = false;
             }
         }
-        if (!queue_is_empty(&signal_event_queue)) {
-            signal_event_t event;
-            queue_remove_blocking(&signal_event_queue, &event);
-            if (event == signal_event_t::BUTTON_PUSHED) {
-                _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
-            } else if (event == signal_event_t::SWITCH_ON) {
-                if (bits_per_sample != bits_per_sample_t::_24BITS) {
+        signal_event_t event = _scan_buttons();
+        if (event == signal_event_t::BUTTON_PUSHED) {
+            _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+        } else if (event == signal_event_t::SWITCH_ON) {
+            if (bits_per_sample != bits_per_sample_t::_24BITS) {
+                if (spdif_rec_wav::is_standby() || spdif_rec_wav::is_recording()) {
                     _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
                     bits_per_sample = bits_per_sample_t::_24BITS;
                     sleep_ms(100);
                     _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                } else {
+                    bits_per_sample = bits_per_sample_t::_24BITS;
                 }
-                printf("bit resolution: %d bits\r\n", bits_per_sample);
-            } else if (event == signal_event_t::SWITCH_OFF) {
-                if (bits_per_sample != bits_per_sample_t::_16BITS) {
+            }
+            printf("bit resolution: %d bits\r\n", bits_per_sample);
+        } else if (event == signal_event_t::SWITCH_OFF) {
+            if (bits_per_sample != bits_per_sample_t::_16BITS) {
+                if (spdif_rec_wav::is_standby() || spdif_rec_wav::is_recording()) {
                     _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
                     bits_per_sample = bits_per_sample_t::_16BITS;
                     sleep_ms(100);
                     _toggle_start_stop(bits_per_sample, wait_sync, user_standy, standby_repeat);
+                } else {
+                    bits_per_sample = bits_per_sample_t::_16BITS;
                 }
-                printf("bit resolution: %d bits\r\n", bits_per_sample);
             }
+            printf("bit resolution: %d bits\r\n", bits_per_sample);
         } else if ((chr = getchar_timeout_us(1)) != PICO_ERROR_TIMEOUT) {
             char c = static_cast<char>(chr);
             if (c == ' ') {

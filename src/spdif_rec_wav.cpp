@@ -242,7 +242,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                     wav_file_status::send_core0_grant();
                 }
 
-                _process_error();
+                _handle_errors();
 
                 if (!queue_is_empty(&_record_cmd_queue)) {
                     queue_remove_blocking(&_record_cmd_queue, &record_cmd_data);
@@ -265,8 +265,10 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
             if (record_cmd_data.cmd == record_cmd_type_t::END_CMD) {
                 _recording_flag = false;
                 prev.wait_status(wav_file_status::status_t::FINALIZED);
-                next.req_finalize(false);
-                next.wait_status(wav_file_status::status_t::FINALIZED);
+                if (next.is_equal_status(wav_file_status::status_t::PREPARED)) {
+                    next.req_finalize(false);
+                    next.wait_status(wav_file_status::status_t::FINALIZED);
+                }
                 next.reset();
 
                 // drain remained spdif queue to delete samples which should not be included in next wav
@@ -278,10 +280,11 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
                 buf_accum = 0;
             }
+            _handle_errors();
             _suffix++;
         }
     }
-    _process_error();
+    _handle_errors();
 }
 
 void spdif_rec_wav::start_recording(const bits_per_sample_t bits_per_sample, const bool standby)
@@ -315,7 +318,7 @@ void spdif_rec_wav::split_recording(const bits_per_sample_t bits_per_sample)
 /*--------------------------/
 /  Protected class functions
 /--------------------------*/
-void spdif_rec_wav::_process_error()
+void spdif_rec_wav::_handle_errors()
 {
     while (!queue_is_empty(&_error_queue)) {
         error_packet_t packet;

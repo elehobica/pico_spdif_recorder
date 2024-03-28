@@ -107,7 +107,7 @@ protected:
 
     // === Private class functions ===
     // functions called from core1
-    static void _process_error();
+    static void _handle_errors();
     static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
     static int _get_last_suffix();
     static void _set_last_suffix(int suffix);

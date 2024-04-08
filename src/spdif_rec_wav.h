@@ -120,6 +120,8 @@ protected:
     static bool _clear_log;
     static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
     static int _sub_frame_buf_id;
+    static int _adaptive_blank_level;
+    static int _adaptive_severe_blank_level;
     static float _blank_sec;
     static float _severe_blank_sec;
     static float _blank_scan_sec;

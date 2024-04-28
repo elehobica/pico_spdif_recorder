@@ -22,6 +22,9 @@
 ----|----|----|----
 | 20 | GP15 | DATA | from S/PDIF data |
 
+Note:
+* For Coaxial input or switchable inputs between Coaxial and TOSLINK, refer to [pico_spdif_rx](https://github.com/elehobica/pico_spdif_rx/)
+
 ### microSD card
 
 | Pico Pin # | Pin Name | Function | microSD Pin Name | microSD Pin # |

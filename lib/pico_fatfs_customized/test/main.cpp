@@ -168,7 +168,11 @@ int main()
     };
     pico_fatfs_set_config(&config);
 
-    fr = f_mount(&fs, "", 1);
+    for (int i = 0; i < 5; i++) {
+        fr = f_mount(&fs, "", 1);
+        if (fr == FR_OK) { break; }
+        pico_fatfs_reboot_spi();
+    }
     if (fr != FR_OK) {
         printf("mount error %d\n", fr);
         _error_blink(1);

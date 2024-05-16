@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+### Fixed
+* Add workaround for mount fail case of Samsung PRO Plus card
 
 ## [1.0.1] - 2024-03-30
 ### Added

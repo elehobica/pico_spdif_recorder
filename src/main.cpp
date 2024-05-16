@@ -147,7 +147,12 @@ static bool _fatfs_init()
 
     // Mount FATFS
     FATFS fs;
-    FRESULT fr = f_mount(&fs, "", 1);
+    FRESULT fr;
+    for (int i = 0; i < 5; i++) {
+        fr = f_mount(&fs, "", 1);
+        if (fr == FR_OK) { break; }
+        pico_fatfs_reboot_spi();
+    }
     if (fr != FR_OK) {
         printf("FATFS mount error %d\r\n", fr);
         return false;

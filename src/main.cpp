@@ -8,19 +8,19 @@
 
 #include "hardware/adc.h"
 #include "hardware/rtc.h"
-#include "pico/stdlib.h"
+#include "pico/cyw43_arch.h"
 #include "pico/flash.h"
 #include "pico/multicore.h"
-#include "pico/cyw43_arch.h"
+#include "pico/stdlib.h"
 #include "pico/util/queue.h"
 
-#include "tf_card.h"
+#include "config_wifi.h"
+#include "ConfigParam.h"
 #include "ff.h"
+#include "ntp_client.h"
 #include "spdif_rx.h"
 #include "spdif_rec_wav.h"
-#include "config_wifi.h"
-#include "ntp_client.h"
-#include "ConfigParam.h"
+#include "tf_card.h"
 
 bool picoW = false;
 static constexpr uint PIN_LED = 25;  // PICO_DEFAULT_LED_PIN of Pico
@@ -290,13 +290,13 @@ static void _toggle_bit_resolution(bits_per_sample_t& bits_per_sample)
     }
 }
 
-static bool _connect_wifi(const std::string& ssid, const std::string& password, const int retry = 3)
+static bool _connect_wifi(const std::string& ssid, const std::string& pass, const int retry = 3)
 {
     printf("... connecting Wi-Fi\r\n");
 
     cyw43_arch_enable_sta_mode();
     for (int i = 0; i < retry; i++) {
-        if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), password.c_str(), CYW43_AUTH_WPA2_AES_PSK, 10000)) {
+        if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), pass.c_str(), CYW43_AUTH_WPA2_AES_PSK, 10000)) {
             printf("failed to connect: %d\r\n", i);
             if (i < retry - 1) {
                 continue;
@@ -346,6 +346,9 @@ int main()
     stdio_init_all();
     picoW = _check_pico_w();
 
+    ConfigParam& cfgParam = ConfigParam::instance();
+    cfgParam.initialize();
+
     // serial connection waiting (max 1 sec)
     while (!stdio_usb_connected() && _millis() < 1000) {
         sleep_ms(100);
@@ -383,16 +386,18 @@ int main()
             return 1;
         }
         printf("Pico W\r\n");
+        const auto& ssid = cfgParam.P_CFG_WIFI_SSID.get();
+        const auto& pass = cfgParam.P_CFG_WIFI_PASS.get();
         // connect Wi-Fi to get time by NTP
-        if (GET_CFG_WIFI_SSID[0] >= 0x20 && GET_CFG_WIFI_SSID[0] <= 0x7e && GET_CFG_WIFI_PASS[0] >= 0x20 && GET_CFG_WIFI_PASS[0] <= 0x7e) {
+        if (ssid.length() > 0 && pass.length() > 0) {
             _set_led(true);
-            if (_connect_wifi(std::string(GET_CFG_WIFI_SSID), std::string(GET_CFG_WIFI_PASS))) {
+            if (_connect_wifi(ssid, pass)) {
                 if (!run_ntp("UTC+0", t_rtc)) {
                     printf("ERROR: failed NTP sync\r\n");
                     _led_disp_error(main_error_t::NTP_ERROR);
                 }
             } else {
-                printf("ERROR: failed Wi-Fi connection: %s\r\n", GET_CFG_WIFI_SSID);
+                printf("ERROR: failed Wi-Fi connection: %s\r\n", ssid.c_str());
                 _led_disp_error(main_error_t::WIFI_CONNECTION_ERROR);
             }
         } else {
@@ -513,21 +518,25 @@ int main()
                     printf("suffix to rec: %03d\r\n", spdif_rec_wav::get_suffix());
                 }
             } else if (c == 'w' && picoW) {
-                std::string ssid, password;
-                if (config_wifi(ssid, password)) {
-                    // store to flash
-                    configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_SSID, ssid.c_str());
-                    configParam.setStr(ConfigParam::ParamID_t::CFG_WIFI_PASS, password.c_str());
-                    if (configParam.finalize()) {
-                        // trial to connect Wi-Fi
-                        if (_connect_wifi(ssid, password)) {
+                std::string ssid, pass;
+                if (config_wifi(ssid, pass)) {
+                    // trial to connect Wi-Fi
+                    if (_connect_wifi(ssid, pass)) {
+                        // store to flash
+                        cfgParam.P_CFG_WIFI_SSID.set(ssid);
+                        cfgParam.P_CFG_WIFI_PASS.set(pass);
+                        if (cfgParam.finalize()) {
+                            printf("Wi-Fi configuration stored to flash\r\n");
                             if (run_ntp("UTC+0", t_rtc)) {
                                 rtc_set_datetime(&t_rtc);
                             }
+                        } else {
+                            printf("ERROR: failed to store Wi-Fi configuration to flash\r\n");
+                            _led_disp_error(main_error_t::FLASH_PROGRAM_ERROR);
                         }
                     } else {
-                        printf("ERROR: failed to program flash\r\n");
-                        _led_disp_error(main_error_t::FLASH_PROGRAM_ERROR);
+                        printf("ERROR: failed Wi-Fi connection: %s\r\n", ssid.c_str());
+                        _led_disp_error(main_error_t::WIFI_CONNECTION_ERROR);
                     }
                 }
             } else if (c == 'h') {

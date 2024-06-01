@@ -13,12 +13,12 @@ set(CMAKE_CXX_STANDARD 17)
 
 pico_sdk_init()
 
-add_subdirectory(lib/pico_spdif_rx)
-add_subdirectory(lib/pico_spdif_rx/samples/lib/pico_audio_32b) # for extended audio.h
-add_subdirectory(lib/pico_fatfs_customized)
-add_subdirectory(lib/pico_ntp_client)
-add_subdirectory(lib/config_wifi)
-add_subdirectory(lib/picoConfigParam)
+add_subdirectory(lib/pico_spdif_rx pico_spdif_rx)
+add_subdirectory(lib/pico_spdif_rx/samples/lib/pico_audio_32b pico_audio_32b) # for extended audio.h
+add_subdirectory(lib/pico_fatfs_customized pico_fatfs_customized)
+add_subdirectory(lib/pico_ntp_client pico_ntp_client)
+add_subdirectory(lib/pico_flash_param pico_flash_param)
+add_subdirectory(lib/pico_flash_param/samples/lib/picow_config_wifi picow_config_wifi)
 
 add_executable(${PROJECT_NAME}
     src/main.cpp
@@ -36,13 +36,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME}
     hardware_adc
     hardware_rtc
-    pico_stdlib
     pico_multicore
     pico_spdif_rx
+    pico_stdlib
     pico_fatfs_customized
+    pico_flash_param
     pico_ntp_client
-    config_wifi
-    picoConfigParam
+    picow_config_wifi
 )
 
 pico_enable_stdio_usb(${PROJECT_NAME} 1)

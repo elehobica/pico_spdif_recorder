@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 ### Fixed
 * Add workaround for mount fail case of Samsung PRO Plus card
+### Changed
+* Use pico_flash_param submodule
 
 ## [1.0.1] - 2024-03-30
 ### Added
@@ -14,11 +16,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 * Store Wi-Fi configuration in user flash (Pico W only)
 * Show errors by LED blink
 * Have a little blank time before emerging sound at start (PRE_START_SEC)
-
 ### Changed
 * Introduce FatFs R0.15 (previously R0.14b)
 * Confirm bandwidth situation and revise card recommendation (Samsung PRO Plus 256GB is the best currently)
-
 ### Fixed
 * Fix bug for seek position in case of large size file when closing file
 

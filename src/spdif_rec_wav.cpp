@@ -37,6 +37,8 @@ char           spdif_rec_wav::_log_filename[16];
 bool           spdif_rec_wav::_clear_log;
 uint32_t       spdif_rec_wav::_sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
 int            spdif_rec_wav::_sub_frame_buf_id = 0;
+int            spdif_rec_wav::_adaptive_blank_level = spdif_rec_wav::BLANK_LEVEL;
+int            spdif_rec_wav::_adaptive_severe_blank_level = spdif_rec_wav::SEVERE_BLANK_LEVEL;
 float          spdif_rec_wav::_blank_sec = 0.0f;
 float          spdif_rec_wav::_severe_blank_sec = 0.0f;
 float          spdif_rec_wav::_blank_scan_sec = 0.0f;
@@ -497,11 +499,26 @@ spdif_rec_wav::blank_status_t spdif_rec_wav::_scan_blank(const uint32_t* buff, c
     float time_sec = static_cast<float>(sub_frame_count) / NUM_CHANNELS / sample_freq;
 
     uint32_t ave_level = data_accum / sub_frame_count;
-    if (ave_level < SEVERE_BLANK_LEVEL) {
+    if (_recording_flag) {
+        if (_adaptive_blank_level < BLANK_LEVEL) {
+            _adaptive_blank_level = ave_level / 2;
+        } else if (ave_level > BLANK_LEVEL) {
+            _adaptive_blank_level = BLANK_LEVEL;
+        }
+        if (_adaptive_severe_blank_level < SEVERE_BLANK_LEVEL) {
+            _adaptive_severe_blank_level = ave_level / 2;
+        } else if (ave_level > SEVERE_BLANK_LEVEL) {
+            _adaptive_severe_blank_level = SEVERE_BLANK_LEVEL;
+        }
+    } else {
+        _adaptive_blank_level = 0;
+        _adaptive_severe_blank_level = 0;
+    }
+    if (ave_level < _adaptive_severe_blank_level) {
         status = (_severe_blank_sec > BLANK_SKIP_SEC) ? blank_status_t::BLANK_SKIP : blank_status_t::BLANK_DETECTED;
         _blank_sec += time_sec;
         _severe_blank_sec += time_sec;
-    } else if (ave_level < BLANK_LEVEL) {
+    } else if (ave_level < _adaptive_blank_level || ave_level == 0) {
         status = blank_status_t::BLANK_DETECTED;
         _blank_sec += time_sec;
         _severe_blank_sec = 0.0f;

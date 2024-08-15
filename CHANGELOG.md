@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 * Add adaptive blank level detection
 ### Changed
 * Use pico_flash_param submodule
+* Support pico-sdk 2.0.0 (previously 1.5.1)
 ### Fixed
 * Add workaround for mount fail case of Samsung PRO Plus card
 

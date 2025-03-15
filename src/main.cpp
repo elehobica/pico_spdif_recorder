@@ -7,11 +7,12 @@
 #include <cstdio>
 
 #include "hardware/adc.h"
-#include "hardware/rtc.h"
+#include "pico/aon_timer.h"
 #include "pico/cyw43_arch.h"
 #include "pico/flash.h"
 #include "pico/multicore.h"
 #include "pico/stdlib.h"
+#include "pico/util/datetime.h"
 #include "pico/util/queue.h"
 
 #include "config_wifi.h"
@@ -333,15 +334,14 @@ int main()
     bits_per_sample_t bits_per_sample = bits_per_sample_t::_16BITS;
     int chr;
     // default RTC time
-    datetime_t t_rtc = {
-        .year  = static_cast<int16_t>(2024),
-        .month = static_cast<int8_t>(1),
-        .day   = static_cast<int8_t>(1),
-        .dotw  = static_cast<int8_t>(1),  // 0 is Sunday, so 5 is Friday
-        .hour  = static_cast<int8_t>(0),
-        .min   = static_cast<int8_t>(0),
-        .sec   = static_cast<int8_t>(0)
-    };
+     struct tm t_rtc = {};
+     t_rtc.tm_year  = 2024 - 1900,
+     t_rtc.tm_mon   = 1 - 1,
+     t_rtc.tm_mday  = 1,
+     t_rtc.tm_hour  = 0,
+     t_rtc.tm_min   = 0,
+     t_rtc.tm_sec   = 0,
+     t_rtc.tm_isdst = -1,
 
     stdio_init_all();
     picoW = _check_pico_w();
@@ -385,7 +385,11 @@ int main()
             _led_disp_error(main_error_t::CYW43_INIT_ERROR, true);
             return 1;
         }
+#if defined(RASPBERRYPI_PICO2_W)
+        printf("Pico 2 W\r\n");
+#else
         printf("Pico W\r\n");
+#endif
         const auto& ssid = cfgParam.P_CFG_WIFI_SSID.get();
         const auto& pass = cfgParam.P_CFG_WIFI_PASS.get();
         // connect Wi-Fi to get time by NTP
@@ -412,8 +416,7 @@ int main()
     _set_led(false);
 
     // RTC
-    rtc_init();
-    rtc_set_datetime(&t_rtc);
+    aon_timer_start_calendar(&t_rtc);
 
     // FATFS initialize
     if (!_fatfs_init()) {
@@ -528,7 +531,7 @@ int main()
                         if (cfgParam.finalize()) {
                             printf("Wi-Fi configuration stored to flash\r\n");
                             if (run_ntp("UTC+0", t_rtc)) {
-                                rtc_set_datetime(&t_rtc);
+                                aon_timer_set_time_calendar(&t_rtc);
                             }
                         } else {
                             printf("ERROR: failed to store Wi-Fi configuration to flash\r\n");

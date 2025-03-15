@@ -8,4 +8,4 @@
 
 #include "pico/util/datetime.h"
 
-bool run_ntp(const char* tz, datetime_t& t_rtc);
+bool run_ntp(const char* tz, struct tm& t_rtc);

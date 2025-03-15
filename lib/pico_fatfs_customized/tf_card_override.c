@@ -4,8 +4,10 @@
 / refer to https://opensource.org/licenses/BSD-2-Clause
 /------------------------------------------------------*/
 
-#include "hardware/rtc.h"
+#include <time.h>
+
 #include "pico/stdlib.h"
+#include "pico/aon_timer.h"
 
 #include "tf_card_override.h"
 
@@ -13,15 +15,15 @@
 /* get the current time */
 DWORD get_fattime (void)
 {
-    datetime_t t;
-    rtc_get_datetime(&t);
+    struct tm t = {};
+    aon_timer_get_time_calendar(&t);
 
-    return ((DWORD) (t.year - 1980) << 25) |
-           ((DWORD) t.month         << 21) |
-           ((DWORD) t.day           << 16) |
-           ((DWORD) t.hour          << 11) |
-           ((DWORD) t.min           <<  5) |
-           ((DWORD) t.sec           >>  1); // sec /2
+    return ((DWORD) (t.tm_year - 80) << 25) |
+           ((DWORD) (t.tm_mon + 1)   << 21) |
+           ((DWORD) t.tm_mday        << 16) |
+           ((DWORD) t.tm_hour        << 11) |
+           ((DWORD) t.tm_min         <<  5) |
+           ((DWORD) t.tm_sec         >>  1); // sec /2
 }
 
 BYTE get_tz (void)

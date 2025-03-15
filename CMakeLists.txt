@@ -1,5 +1,14 @@
 cmake_minimum_required(VERSION 3.13)
-set(PICO_BOARD "pico_w")
+
+# define "w" board to use cyw43_arch_xxx() function
+if(PICO_BOARD)
+    unset(PICO_BOARD)
+endif()
+if(PICO_PLATFORM STREQUAL rp2350)
+    set(PICO_BOARD pico2_w)
+else()
+    set(PICO_BOARD pico_w)
+endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -35,13 +44,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_link_libraries(${PROJECT_NAME}
     hardware_adc
-    hardware_rtc
-    pico_multicore
-    pico_spdif_rx
-    pico_stdlib
+    pico_aon_timer
     pico_fatfs_customized
     pico_flash_param
+    pico_multicore
     pico_ntp_client
+    pico_spdif_rx
+    pico_stdlib
     picow_config_wifi
 )
 

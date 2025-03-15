@@ -22,7 +22,7 @@ if (NOT TARGET pico_fatfs_customized)
     target_link_libraries(pico_fatfs_customized INTERFACE
         hardware_clocks
         hardware_spi
-        hardware_rtc
+        pico_aon_timer
         pico_stdlib
     )
 endif()

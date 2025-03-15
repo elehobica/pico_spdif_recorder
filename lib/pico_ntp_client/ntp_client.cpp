@@ -32,7 +32,7 @@ typedef struct NTP_T_ {
 
 static const char* _tz;
 static bool _got_ntp_time = false;
-static datetime_t _t_rtc;
+static struct tm _t_rtc;
 
 // Called with results of operation
 static void ntp_result(NTP_T* state, int status, time_t *result) {
@@ -41,21 +41,11 @@ static void ntp_result(NTP_T* state, int status, time_t *result) {
         setenv(ENV_TZ, _tz, 1);
         tzset();
 
-        struct tm t;
-        gmtime_r(result, &t);  // utc
+        gmtime_r(result, &_t_rtc);  // utc
 
         struct tm lt;
         localtime_r(result, &lt);  // localtime
         printf("got ntp response: %s %04d/%02d/%02d %02d:%02d:%02d\n", _tz, lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday, lt.tm_hour, lt.tm_min, lt.tm_sec);
-
-        // copy to RTC (UTC)
-        _t_rtc.year  = static_cast<int16_t>(t.tm_year + 1900);
-        _t_rtc.month = static_cast<int8_t>(t.tm_mon + 1);
-        _t_rtc.day   = static_cast<int8_t>(t.tm_mday);
-        _t_rtc.dotw  = static_cast<int8_t>(t.tm_wday);  // 0 is Sunday, so 5 is Friday
-        _t_rtc.hour  = static_cast<int8_t>(t.tm_hour);
-        _t_rtc.min   = static_cast<int8_t>(t.tm_min);
-        _t_rtc.sec   = static_cast<int8_t>(t.tm_sec);
 
         _got_ntp_time = true;
     }
@@ -147,7 +137,7 @@ static NTP_T* ntp_init(void) {
 }
 
 // Runs ntp
-bool run_ntp(const char* tz, datetime_t& t_rtc)
+bool run_ntp(const char* tz, struct tm& t_rtc)
 {
     _tz = tz;
     _got_ntp_time = false;

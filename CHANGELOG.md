@@ -7,9 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 ### Added
 * Add adaptive blank level detection
+* Add Raspberry Pi Pico 2 series boards
 ### Changed
 * Use pico_flash_param submodule
-* Support pico-sdk 2.0.0 (previously 1.5.1)
+* Support pico-sdk 2.1.1 (previously 1.5.1)
 * Log only when recording done on log file
 ### Fixed
 * Add workaround for mount fail case of Samsung PRO Plus card

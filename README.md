@@ -2,7 +2,7 @@
 
 ![PCB Front](doc/pico_spdif_recorder_pcb_front.jpg)
 
-[![workflow](https://github.com/elehobica/pico_spdif_recorder/actions/workflows/build_binaries.yml/badge.svg)](https://github.com/elehobica/pico_spdif_recorder/actions/workflows/build_binaries.yml)
+[![Build](https://github.com/elehobica/pico_spdif_recorder/actions/workflows/build-binaries.yml/badge.svg)](https://github.com/elehobica/pico_spdif_recorder/actions/workflows/build-binaries.yml)
 
 ## Overview
 * Hi-Res recorder from S/PDIF input to WAV files on microSD card

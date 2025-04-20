@@ -435,7 +435,7 @@ int main()
     while (getchar_timeout_us(1) != PICO_ERROR_TIMEOUT) {};
 
     printf("---------------------------\r\n");
-    printf("--- pico_spdif_recorder ---\r\n");
+    printf("  pico_spdif_recorder ver. %s\r\n", cfgParam.P_CFG_VERSION.get().c_str());
     _show_help(bits_per_sample);
 
     while (true) {

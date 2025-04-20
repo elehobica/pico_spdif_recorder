@@ -5,10 +5,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [1.0.2] - 2025-04-20
 ### Added
 * Add adaptive blank level detection
 * Add Raspberry Pi Pico 2 series boards
-* Add workflow to build binaries
+* Add GiHub Actions for build and release
 ### Changed
 * Use pico_flash_param submodule
 * Support pico-sdk 2.1.1 (previously 1.5.1)

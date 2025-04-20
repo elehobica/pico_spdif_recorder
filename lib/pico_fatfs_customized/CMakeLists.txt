@@ -1,7 +1,6 @@
 if (NOT TARGET pico_fatfs_customized)
     add_library(pico_fatfs_customized INTERFACE)
 
-    #set(FATFS_REV R0.14b)
     set(FATFS_REV R0.15)
 
     target_sources(pico_fatfs_customized INTERFACE

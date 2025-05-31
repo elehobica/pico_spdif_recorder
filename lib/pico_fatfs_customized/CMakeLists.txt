@@ -1,4 +1,5 @@
 if (NOT TARGET pico_fatfs_customized)
+    add_subdirectory(pico_fatfs/pio/spi pio_spi)
     add_library(pico_fatfs_customized INTERFACE)
 
     set(FATFS_REV R0.15)
@@ -23,5 +24,6 @@ if (NOT TARGET pico_fatfs_customized)
         hardware_spi
         pico_aon_timer
         pico_stdlib
+        pio_spi
     )
 endif()

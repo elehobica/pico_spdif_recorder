@@ -356,7 +356,7 @@ int main()
     printf("\r\n");
 
     // print configuration parameters in flash
-    //configParam.printInfo();
+    //cfgParam.printInfo();
 
     // DCDC PSM control
     // 0: PFM mode (best efficiency)
@@ -435,7 +435,7 @@ int main()
     while (getchar_timeout_us(1) != PICO_ERROR_TIMEOUT) {};
 
     printf("---------------------------\r\n");
-    printf("  pico_spdif_recorder ver. %s\r\n", cfgParam.P_CFG_VERSION.get().c_str());
+    //printf("  pico_spdif_recorder ver. %s\r\n", cfgParam.P_CFG_VERSION.get().c_str());
     _show_help(bits_per_sample);
 
     while (true) {

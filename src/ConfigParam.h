@@ -19,7 +19,8 @@ typedef enum {
 //=================================
 // Interface of ConfigParam class
 //=================================
-struct ConfigParam : FlashParamNs::FlashParam {
+struct ConfigParam : FlashParamNs::FlashParam
+{
     static ConfigParam& instance() {  // Singleton
         static ConfigParam instance;
         return instance;
@@ -28,4 +29,9 @@ struct ConfigParam : FlashParamNs::FlashParam {
     FlashParamNs::Parameter<std::string> P_CFG_VERSION  {CFG_ID_VERSION,   "CFG_VERSION",   "0.0.0", 16};
     FlashParamNs::Parameter<std::string> P_CFG_WIFI_SSID{CFG_ID_WIFI_SSID, "CFG_WIFI_SSID", "",      16};
     FlashParamNs::Parameter<std::string> P_CFG_WIFI_PASS{CFG_ID_WIFI_PASS, "CFG_WIFI_PASS", "",      16};
+
+    void initialize(bool preserveStoreCount = false) override {
+        FlashParamNs::FlashParam::initialize(preserveStoreCount);
+        P_CFG_VERSION.loadDefault();  // always set default version
+    }
 };

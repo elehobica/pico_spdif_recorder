@@ -12,6 +12,10 @@ inputs:
     description: 'Target to set version'
     required: true
     default: 'src/ConfigParam.h'
+  regexp_str:
+    description: 'RegExp string to match version'
+    required: false
+    default: '("CFG_VERSION",\s+)"\d+\.\d+\.\d+"'
   version_str: 
     description: 'Version string to set'
     required: true

@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-## [1.0.3] - 2025-06-01
+## [1.0.4] - 2025-06-14
 ### Added
 * Add adaptive blank level detection
 * Add Raspberry Pi Pico 2 series boards

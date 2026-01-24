@@ -91,6 +91,30 @@ Using custom tolerance (5 seconds):
 python wav_tagger.py ./input ./album.yaml ./output 5
 ```
 
+## Convert to MP3
+require ffmpeg installation
+* Windows (Powershell)
+```powershell
+> winget install ffmpeg
+```
+* Linux (Ubuntu etc)
+```bash
+sudo apt install ffmpeg
+```
+### Coversion
+* Bash
+```bash
+for f in *.wav; do
+  ffmpeg -i "$f" -c:a libmp3lame -q:a 2 -map_metadata 0 "${f%.wav}.mp3"
+done
+```
+* Powershell
+```powershell
+Get-ChildItem *.wav | ForEach-Object {
+  ffmpeg.exe -i $_.FullName -c:a libmp3lame -b:a 256k -map_metadata 0 "$($_.BaseName).mp3"
+}
+```
+
 ## YAML Metadata Format
 
 ### Basic Structure

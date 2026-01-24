@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+### Added
+* Add wav_tagger environment as a helper tool for generated wav file post-processing
 
 ## [1.0.4] - 2025-06-14
 ### Added

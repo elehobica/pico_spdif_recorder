@@ -1,0 +1,30 @@
+# Directories (WAV files, temp files, etc.)
+*/
+
+# YAML test files
+*.yml
+*.yaml
+
+# Python virtual environment
+venv/
+env/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

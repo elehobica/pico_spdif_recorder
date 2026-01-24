@@ -124,6 +124,7 @@ tracks:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `title` | string | Yes | Track title (UTF-8 supported) |
+| `artist` | string | No | Track-specific artist (overrides album artist if specified) |
 | `time` | string | Yes | Expected duration in `mm:ss` format |
 | `track-number` | integer | Yes | Track number (1-based) |
 
@@ -149,6 +150,29 @@ tracks:
     time: "2:41"
     track-number: 2
 ```
+
+### Example with Track-Specific Artists
+
+```yaml
+album: "Various Artists Compilation"
+artist: "Various Artists"
+year: 2024
+genre: "Pop"
+tracks:
+  - title: "First Song"
+    artist: "Artist A"
+    time: "3:45"
+    track-number: 1
+  - title: "Second Song"
+    artist: "Artist B"
+    time: "4:12"
+    track-number: 2
+  - title: "Third Song"
+    time: "3:30"
+    track-number: 3
+```
+
+**Note**: In the example above, tracks 1 and 2 have their own artists, while track 3 will use the album artist "Various Artists".
 
 ## How It Works
 

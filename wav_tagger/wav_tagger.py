@@ -395,7 +395,7 @@ def process_album(wav_dir: str, yaml_path: str, output_dir: str, tolerance: int 
 
         track_metadata = {
             'title': id3_title,
-            'artist': metadata['artist'],
+            'artist': track.get('artist', metadata['artist']),
             'album': metadata['album'],
             'year': metadata['year'],
             'genre': metadata['genre'],

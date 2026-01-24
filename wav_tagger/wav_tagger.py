@@ -15,6 +15,11 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
 
+# Constants
+MAX_FILENAME_LENGTH = 128  # Maximum output filename length in characters
+MAX_ID3_TITLE_LENGTH = 256  # Maximum ID3 title field length in characters
+
+
 class WavProcessor:
     """Process WAV files: merge, split, and add ID3v2.3 tags"""
     
@@ -162,34 +167,56 @@ def format_time(seconds: float) -> str:
     return f"{minutes}:{secs:02d}"
 
 
-def get_user_choice(track_title: str, expected_time: str, 
-                   actual_time: str, diff: float, is_longer: bool) -> int:
+def sanitize_filename(filename: str) -> str:
+    """Replace invalid filename characters with '-'"""
+    # Windows/Unix invalid filename characters
+    invalid_chars = '<>:"/\\|?*'
+    sanitized = filename
+    for char in invalid_chars:
+        sanitized = sanitized.replace(char, '-')
+    # Also remove leading/trailing spaces and dots (Windows restriction)
+    sanitized = sanitized.strip('. ')
+    return sanitized
+
+
+def get_user_choice(track_title: str, expected_time: str,
+                   actual_time: str, diff: float, is_longer: bool,
+                   multi_track_count: int = 0, multi_track_time: str = "") -> int:
     """Ask user what to do when WAV duration doesn't match expected time"""
     print(f"\n{'='*60}")
     print(f"Track: \"{track_title}\" (Expected: {expected_time})")
     print(f"Current WAV duration: {actual_time}")
-    print(f"Difference: {'+' if is_longer else '-'}{format_time(abs(diff))} "
+    print(f"Difference: {'+' if is_longer else '-'}{abs(diff):.2f}s "
           f"(tolerance exceeded)")
     print(f"{'='*60}")
-    
+
+    max_choice = 3
     if is_longer:
         print("\nOptions:")
         print("1. Use as is (keep full duration)")
         print("2. Split at expected time (first part -> current track, "
               "rest -> next)")
         print("3. Skip this track")
+        if multi_track_count > 1:
+            print(f"4. Combine next {multi_track_count} tracks into one WAV "
+                  f"(total expected: {multi_track_time})")
+            max_choice = 4
     else:
         print("\nOptions:")
         print("1. Use as is (shorter duration)")
         print("2. Merge with next WAV file")
         print("3. Skip this track")
-    
+
     while True:
         try:
-            choice = int(input("\nEnter your choice (1-3): "))
-            if 1 <= choice <= 3:
+            prompt = f"\nEnter your choice (1-{max_choice}, default=1): "
+            user_input = input(prompt).strip()
+            if user_input == "":
+                return 1  # Default: Use as is
+            choice = int(user_input)
+            if 1 <= choice <= max_choice:
                 return choice
-            print("Invalid choice. Please enter 1, 2, or 3.")
+            print(f"Invalid choice. Please enter 1-{max_choice}.")
         except ValueError:
             print("Invalid input. Please enter a number.")
 
@@ -220,11 +247,14 @@ def process_album(wav_dir: str, yaml_path: str, output_dir: str, tolerance: int 
     temp_dir = Path(output_dir) / 'temp'
     os.makedirs(temp_dir, exist_ok=True)
     
-    for track in metadata['tracks']:
+    track_idx = 0
+    while track_idx < len(metadata['tracks']):
+        track = metadata['tracks'][track_idx]
+
         if current_wav_idx >= len(wav_files):
             print(f"\nWarning: No more WAV files for track {track['track-number']}")
             break
-        
+
         track_title = track['title']
         expected_duration = processor.parse_time(track['time'])
         track_number = track['track-number']
@@ -251,13 +281,31 @@ def process_album(wav_dir: str, yaml_path: str, output_dir: str, tolerance: int 
             
             current_wav_idx += 1
         else:
-            # Outside tolerance - ask user
+            # Outside tolerance - check if multiple tracks fit in this WAV
+            multi_track_count = 0
+            multi_track_time = ""
+
+            if diff > 0:  # WAV is longer than expected
+                # Try to find how many tracks fit in this WAV
+                cumulative_duration = 0
+                for i in range(track_idx, len(metadata['tracks'])):
+                    cumulative_duration += processor.parse_time(metadata['tracks'][i]['time'])
+                    if abs(actual_duration - cumulative_duration) <= tolerance:
+                        multi_track_count = i - track_idx + 1
+                        multi_track_time = format_time(cumulative_duration)
+                        break
+                    elif cumulative_duration > actual_duration + tolerance:
+                        break
+
+            # Ask user
             choice = get_user_choice(
                 track_title,
                 track['time'],
                 format_time(actual_duration),
                 diff,
-                is_longer=(diff > 0)
+                is_longer=(diff > 0),
+                multi_track_count=multi_track_count,
+                multi_track_time=multi_track_time
             )
             
             if choice == 1:
@@ -282,9 +330,8 @@ def process_album(wav_dir: str, yaml_path: str, output_dir: str, tolerance: int 
                         str(remainder)
                     )
                     
-                    # Insert remainder at the beginning for next iteration
-                    wav_files.insert(current_wav_idx + 1, 
-                                   f"../temp/remainder_{current_wav_idx}.wav")
+                    # Insert remainder for next iteration (use absolute path)
+                    wav_files.insert(current_wav_idx + 1, str(remainder.resolve()))
                     current_wav_idx += 1
                 else:
                     # Merge with next file
@@ -303,18 +350,51 @@ def process_album(wav_dir: str, yaml_path: str, output_dir: str, tolerance: int 
                     )
                     current_wav_idx += 2
                     
+            elif choice == 4:
+                # Combine multiple tracks into one WAV
+                print(f"  → Combining {multi_track_count} tracks into one WAV")
+                temp_wav = temp_dir / f"track_{track_number:02d}.wav"
+
+                # Copy file
+                with open(current_wav_path, 'rb') as src, open(temp_wav, 'wb') as dst:
+                    dst.write(src.read())
+
+                # Create combined metadata (use combined track titles)
+                combined_titles = [metadata['tracks'][track_idx + i]['title']
+                                 for i in range(multi_track_count)]
+                track_title = " / ".join(combined_titles)
+
+                # Advance track_idx by the number of combined tracks - 1
+                # (the loop increment will add 1 more at the end)
+                track_idx += multi_track_count - 1
+                current_wav_idx += 1
             else:
                 # Skip
                 print("  → Skipping track")
                 current_wav_idx += 1
+                track_idx += 1
                 continue
         
         # Add ID3 tag
-        output_filename = f"{track_number:02d} - {track_title}.wav"
+        safe_title = sanitize_filename(track_title)
+
+        # Truncate filename if too long
+        # Format: "{track_number:02d} - {safe_title}.wav"
+        # Fixed parts: "XX - " (5 chars) + ".wav" (4 chars) = 9 chars
+        max_title_length = MAX_FILENAME_LENGTH - 9
+        if len(safe_title) > max_title_length:
+            safe_title = safe_title[:max_title_length].rstrip()
+
+        output_filename = f"{track_number:02d} - {safe_title}.wav"
         output_path = os.path.join(output_dir, output_filename)
-        
+
+        # Truncate ID3 title if too long
+        id3_title = track_title
+        if len(id3_title) > MAX_ID3_TITLE_LENGTH:
+            id3_title = id3_title[:MAX_ID3_TITLE_LENGTH].rstrip()
+
         track_metadata = {
-            'title': track_title,
+            'title': id3_title,
             'artist': metadata['artist'],
             'album': metadata['album'],
             'year': metadata['year'],
@@ -324,6 +404,8 @@ def process_album(wav_dir: str, yaml_path: str, output_dir: str, tolerance: int 
         
         processor.add_id3_tag_to_wav(str(temp_wav), output_path, track_metadata)
         print(f"  ✓ Saved: {output_filename}")
+
+        track_idx += 1
     
     # Cleanup temp directory
     import shutil

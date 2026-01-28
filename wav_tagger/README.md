@@ -159,22 +159,6 @@ tracks:
 - **UTF-8 encoding** is supported for all text fields (album, artist, title, genre)
 - **Tolerance** is NOT specified in YAML - it's a command line argument
 
-### Example with Japanese Text
-
-```yaml
-album: "ピアノ協奏曲集"
-artist: "東京交響楽団"
-year: 2024
-genre: "Classical"
-tracks:
-  - title: "月の光"
-    time: "5:23"
-    track-number: 1
-  - title: "亜麻色の髪の乙女"
-    time: "2:41"
-    track-number: 2
-```
-
 ### Example with Track-Specific Artists
 
 ```yaml
@@ -197,6 +181,10 @@ tracks:
 ```
 
 **Note**: In the example above, tracks 1 and 2 have their own artists, while track 3 will use the album artist "Various Artists".
+
+## YAML Metadata Generation
+
+If you're Claude user, import [spotify_metadata_extractor_SKILL.md](spotify_metadata_extractor_SKILL.md) as a skill into your account to generate YAML Metadata for recoded wav files from Spotify
 
 ## How It Works
 

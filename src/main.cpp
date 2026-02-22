@@ -372,7 +372,6 @@ int main()
     gpio_init(PIN_SWITCH_24BIT);
     gpio_set_dir(PIN_SWITCH_24BIT, GPIO_IN);
     gpio_pull_up(PIN_SWITCH_24BIT);
-    bits_per_sample = gpio_get(PIN_SWITCH_24BIT) ? bits_per_sample_t::_16BITS : bits_per_sample_t::_24BITS;
 
     // spdif_rx initialize
     _spdif_rx_init();
@@ -434,6 +433,7 @@ int main()
     // Discard any input.
     while (getchar_timeout_us(1) != PICO_ERROR_TIMEOUT) {};
 
+    bits_per_sample = gpio_get(PIN_SWITCH_24BIT) ? bits_per_sample_t::_16BITS : bits_per_sample_t::_24BITS;
     printf("---------------------------\r\n");
     printf("  pico_spdif_recorder ver. %s\r\n", cfgParam.P_CFG_VERSION.get().c_str());
     _show_help(bits_per_sample);

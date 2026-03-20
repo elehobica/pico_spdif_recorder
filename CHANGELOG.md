@@ -5,10 +5,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [1.0.5] - 2026-03-21
 ### Added
 * Add wav_tagger environment as a helper tool for generated wav file post-processing
 ### Changed
 * Replace set-version action with composite script
+### Fixed
+* Revise PIN_SWITCH_24BIT switch capture timing to avoid initial mis-judgment
 
 ## [1.0.4] - 2025-06-14
 ### Added

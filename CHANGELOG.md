@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 ### Added
 * Add wav_tagger environment as a helper tool for generated wav file post-processing
+### Changed
+* Replace set-version action with composite script
 
 ## [1.0.4] - 2025-06-14
 ### Added

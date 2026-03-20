@@ -16,7 +16,7 @@ jobs:
       VERSION_LENGTH: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: true
       - name: Generate version string
@@ -55,7 +55,7 @@ jobs:
           identifier: pico2
           output_path: ${{ env.RELEASE_DIR }}
       - name: Upload production artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: dist-binaries
           path: |

@@ -30,7 +30,7 @@ jobs:
       RELEAESE_NOTE: ./ReleaseNote.md
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Extract Release Note from CHANGELOG
         run: |
           pattern1="^## \[${{ github.ref_name }}\]"

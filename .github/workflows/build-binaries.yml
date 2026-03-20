@@ -55,7 +55,7 @@ jobs:
           identifier: pico2
           output_path: ${{ env.RELEASE_DIR }}
       - name: Upload production artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: dist-binaries
           path: |

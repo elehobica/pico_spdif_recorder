@@ -34,4 +34,4 @@ runs:
         version_str="${{ inputs.version_str }}"
         version_str_size=${{ inputs.version_str_size }}
         version_str="${version_str:0:$version_str_size}"
-        sed -i -E 's/${{ inputs.regexp_str }}/\1"'"${version_str}"'"/' "${{ inputs.target }}"
+        sed -i -E 's#${{ inputs.regexp_str }}#\1"'"${version_str}"'"#' "${{ inputs.target }}"

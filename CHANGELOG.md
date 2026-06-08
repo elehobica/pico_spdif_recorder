@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [1.0.6] - 2026-06-08
 ### Added
 * Add `build_docker.sh` for Docker-based local build (mirrors CI workflow)
 * Add Wi-Fi / NTP connecting heartbeat LED pattern on Pico W / Pico 2 W (50 ms pulse per second)

@@ -561,9 +561,9 @@ int main()
             while (getchar_timeout_us(1) != PICO_ERROR_TIMEOUT) {};
         }
         if (spdif_rec_wav::is_recording()) {
-            _set_led((_millis() / 500) % 2 == 0);
+            _set_led((_millis() / 500) % 2 == 0);  // recording: 0.5 s blink
         } else {
-            _set_led(true);
+            _set_led(true);  // stand-by: steady ON
         }
 
         // background file process on core0

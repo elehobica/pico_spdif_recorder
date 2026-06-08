@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+### Added
+* Add `build_docker.sh` for Docker-based local build (mirrors CI workflow)
+* Add Wi-Fi / NTP connecting heartbeat LED pattern on Pico W / Pico 2 W (50 ms pulse per second)
+### Changed
+* Stand-by LED is now steady ON (previously OFF)
+* Refactor Wi-Fi connect to async polling so LED can be driven safely from the main thread
+### Fixed
+* Avoid redundant Wi-Fi connect retries on successful connection
 
 ## [1.0.5] - 2026-03-21
 ### Added

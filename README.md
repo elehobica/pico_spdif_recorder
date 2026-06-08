@@ -126,9 +126,11 @@ $ make -j4
 * Manual immediate split of WAV file without gap
 
 ### LED indicator
-* Slow blink: Recording is on-going.
-* Fast blink: Background file proceses to close previous file and prepare next file are on-going. During this term, no command requests can be accepted.
-* Repeated Slow blink and Fast blink: indicating errors (see log on serial console.)
+* Steady ON: Stand-by (ready to start recording).
+* Slow blink (0.5 s ON / 0.5 s OFF): Recording is on-going.
+* Fast blink (0.1 s ON / 0.1 s OFF): Background file processes to close previous file and prepare next file are on-going. During this term, no command requests can be accepted.
+* Heartbeat (50 ms pulse once per second): Wi-Fi / NTP connection is in progress (Raspberry Pi Pico W / Pico 2 W only).
+* Repeated burst of N blinks (0.2 s each) with a pause: indicating errors. The number of blinks identifies the error (see log on serial console).
 
 ## microSD card
 ### Card recommendation for Hi-Res recording

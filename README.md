@@ -48,7 +48,21 @@ Note:
 | 9 | GP6 | Input | 16bit/24bit switch |
 | 10 | GP7 | Input | Start/Stop button |
 
-## How to build
+## How to build with docker image
+* Builds the firmware inside [pico-sdk-dev-docker:sdk-2.1.1-1.0.0](https://hub.docker.com/r/elehobica/pico-sdk-dev-docker) (same image used by CI). Requires Docker; no local Pico SDK setup is needed.
+* `build_docker.sh` at the project root drives the container build.
+```
+$ git clone -b main https://github.com/elehobica/pico_spdif_recorder.git
+$ cd pico_spdif_recorder
+$ git submodule update -i
+$ ./build_docker.sh           # build both targets (default)
+$ ./build_docker.sh pico      # build only Pico / Pico W      -> build/pico_spdif_recorder.uf2
+$ ./build_docker.sh pico2     # build only Pico 2 / Pico 2 W  -> build2/pico_spdif_recorder.uf2
+```
+* Outputs: `build/pico_spdif_recorder.uf2` (Pico / Pico W), `build2/pico_spdif_recorder.uf2` (Pico 2 / Pico 2 W)
+* Download "*.uf2" on RPI-RP2 or RP2350 drive
+
+## How to build in local
 * See ["Getting started with Raspberry Pi Pico"](https://datasheets.raspberrypi.org/pico/getting-started-with-pico.pdf)
 * Put "pico-sdk", "pico-examples" and "pico-extras" on the same level with this project folder.
 * Set environmental variables for PICO_SDK_PATH, PICO_EXTRAS_PATH and PICO_EXAMPLES_PATH

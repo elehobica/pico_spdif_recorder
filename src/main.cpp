@@ -297,18 +297,31 @@ static bool _connect_wifi(const std::string& ssid, const std::string& pass, cons
 
     cyw43_arch_enable_sta_mode();
     for (int i = 0; i < retry; i++) {
-        if (cyw43_arch_wifi_connect_timeout_ms(ssid.c_str(), pass.c_str(), CYW43_AUTH_WPA2_AES_PSK, 10000)) {
-            printf("failed to connect: %d\r\n", i);
-            if (i < retry - 1) {
-                continue;
-            } else {
-                return false;
-            }
+        int err = cyw43_arch_wifi_connect_async(ssid.c_str(), pass.c_str(), CYW43_AUTH_WPA2_AES_PSK);
+        if (err) {
+            printf("failed to start connect: %d (err=%d)\r\n", i, err);
+            continue;
         }
+        absolute_time_t deadline = make_timeout_time_ms(10000);
+        int status = CYW43_LINK_DOWN;
+        while (!time_reached(deadline)) {
+            // heartbeat (50 ms ON / 950 ms OFF) driven from main thread to avoid SPI race with cyw43
+            _set_led((_millis() % 1000) < 50);
+            status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
+            if (status == CYW43_LINK_UP) break;
+            if (status < 0) break;
+            cyw43_arch_poll();
+            sleep_ms(10);
+        }
+        if (status == CYW43_LINK_UP) {
+            _set_led(false);
+            printf("connected\r\n");
+            return true;
+        }
+        printf("failed to connect: %d (status=%d)\r\n", i, status);
     }
-    printf("connected\r\n");
-
-    return true;
+    _set_led(false);
+    return false;
 }
 
 static void _led_disp_error(const main_error_t error, const bool forever = false)
@@ -393,7 +406,6 @@ int main()
         const auto& pass = cfgParam.P_CFG_WIFI_PASS.get();
         // connect Wi-Fi to get time by NTP
         if (ssid.length() > 0 && pass.length() > 0) {
-            _set_led(true);
             if (_connect_wifi(ssid, pass)) {
                 if (!run_ntp("UTC+0", t_rtc)) {
                     printf("ERROR: failed NTP sync\r\n");
@@ -551,7 +563,7 @@ int main()
         if (spdif_rec_wav::is_recording()) {
             _set_led((_millis() / 500) % 2 == 0);
         } else {
-            _set_led(false);
+            _set_led(true);
         }
 
         // background file process on core0

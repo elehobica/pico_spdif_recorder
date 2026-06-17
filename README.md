@@ -142,9 +142,10 @@ $ make -j4
 | # | Vendor | Product Name | Part Number | Comment |
 ----|----|----|----|----
 | 1 | Samsung | PRO Plus 256GB | MB-MD256SA | 24bit/192KHz is worth trying for non-long-time tracks. 24bit/96KHz is stable. |
-| 2 | SanDisk | Extreme PRO 256GB | SDSQXCD-256G-GN6MA | 24bit/192KHz is too challenging. 24bit/96KHz is stable. |
+| 1 | Kioxia | Exceria G2 256GB | LMEX2L256GG2 | 24bit/192KHz is worth trying for non-long-time tracks. 24bit/96KHz is stable. |
+| 3 | SanDisk | Extreme PRO 256GB | SDSQXCD-256G-GN6MA | 24bit/192KHz is too challenging. 24bit/96KHz is stable. |
 
-<img src="doc/samsung-pro-plus-256gb.jpg" width="80" />  <img src="doc/sandisk-extreme-pro-256gb.jpg" width="80" />
+<img src="doc/samsung-pro-plus-256gb.jpg" width="80" /> <img src="doc/kioxia_exceria_g2_256g.jpg" width="80" /> <img src="doc/sandisk-extreme-pro-256gb.jpg" width="80" />
 
 ### File timestamp
 * File timestamp is synchronized to NTP if using Raspberry Pi Pico W and connected to Wi-Fi.

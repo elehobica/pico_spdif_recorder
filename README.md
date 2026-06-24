@@ -1,6 +1,7 @@
 # S/PDIF recoder to WAV on SD card for Raspberry Pi Pico series
 
-![PCB Front](doc/pico_spdif_recorder_v1.2_inside.jpg)
+<img src="doc/pico_spdif_recorder_v1.2_front.jpg" width="320" /> <img src="doc/pico_spdif_recorder_v1.2_inside.jpg" width="320" /> 
+
 
 [![Build](https://github.com/elehobica/pico_spdif_recorder/actions/workflows/build-binaries.yml/badge.svg)](https://github.com/elehobica/pico_spdif_recorder/actions/workflows/build-binaries.yml)
 

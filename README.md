@@ -8,7 +8,7 @@
 ## Overview
 * Hi-Res recorder from S/PDIF input to WAV files on microSD card
 * Bit resolution: 16bit or 24bit (2ch)
-* Sampling frequency: 44.1 KHz, 48.0 KHz, 88.2 KHz, 96.0 KHz (, 176.4 KHz, 192 KHz)
+* Sampling frequency: 44.1 KHz, 48.0 KHz, 88.2 KHz, 96.0 KHz
 * Recording only, no monitoring or playback functions
 
 ## Supported Board and Peripheral Devices
@@ -135,16 +135,15 @@ $ make -j4
 
 ## microSD card
 ### Card recommendation for Hi-Res recording
-* Due to the limitation of single bit SPI interface driven by Raspberry Pi Pico, even with highest class microSD cards (as of 2024), recording in 24bit 176.4 KHz or 192.0 KHz is challenging. It will sometimes causes the drops of audio sampling data. The bandwidth status can be monitored in Verbose mode.
 * The most severe situation for bandwidth is to start suceeeding track recording when previous long-time track more than 20 minutes has to be closed.
 * With following recommended microSD cards, recording in 24bit 96.0 KHz will be stable as far as experimentally confirmed.
 * Format micorSD card in exFAT with [official SD Card Formatter](https://www.sdcard.org/downloads/formatter/) before usage. 
 
 | # | Vendor | Product Name | Part Number | Comment |
 ----|----|----|----|----
-| 1 | Samsung | PRO Plus 256GB | MB-MD256SA | 24bit/192KHz is worth trying for non-long-time tracks. 24bit/96KHz is stable. |
-| 1 | Kioxia | Exceria G2 256GB | LMEX2L256GG2 | 24bit/192KHz is worth trying for non-long-time tracks. 24bit/96KHz is stable. |
-| 3 | SanDisk | Extreme PRO 256GB | SDSQXCD-256G-GN6MA | 24bit/192KHz is too challenging. 24bit/96KHz is stable. |
+| 1 | Samsung | PRO Plus 256GB | MB-MD256SA | 24bit/96KHz is stable. |
+| 1 | Kioxia | Exceria G2 256GB | LMEX2L256GG2 | 24bit/96KHz is stable. |
+| 3 | SanDisk | Extreme PRO 256GB | SDSQXCD-256G-GN6MA | 24bit/96KHz is stable. |
 
 <img src="doc/samsung-pro-plus-256gb.jpg" width="80" /> <img src="doc/kioxia_exceria_g2_256g.jpg" width="80" /> <img src="doc/sandisk-extreme-pro-256gb.jpg" width="80" />
 

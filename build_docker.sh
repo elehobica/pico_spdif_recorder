@@ -6,12 +6,12 @@
 #------------------------------------------------------
 #
 # Local Docker build script that mirrors .github/workflows/build-binaries.yml.
-# Uses the same SDK image as CI (elehobica/pico-sdk-dev-docker:sdk-2.1.1-1.0.0)
+# Uses the same SDK image as CI (elehobica/pico-sdk-dev-docker:sdk-2.3.0)
 # and runs cmake/make inside the container.
 
 set -e
 
-IMAGE="elehobica/pico-sdk-dev-docker:sdk-2.1.1-1.0.0"
+IMAGE="elehobica/pico-sdk-dev-docker:sdk-2.3.0"
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 usage() {

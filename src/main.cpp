@@ -132,6 +132,24 @@ static void _spdif_rx_init()
     spdif_rx_set_callback_on_lost_stable(_on_lost_stable_func);
 }
 
+static bool _store_config_param()
+{
+    // spdif_rx must be stopped while programming flash because interrupts on core0 are disabled meanwhile,
+    // then spdif_rx DMA ping-pong keeps chaining without being re-configured by its IRQ handler and overruns its buffer
+    uint32_t status = save_and_disable_interrupts();
+    spdif_rx_end();
+    restore_interrupts(status);
+
+    bool result = ConfigParam::instance().finalize();
+
+    status = save_and_disable_interrupts();
+    spdif_rx_end();  // in case spdif_rx pending alarm has restarted capture after spdif_rx_end() above
+    _spdif_rx_init();
+    restore_interrupts(status);
+
+    return result;
+}
+
 static bool _fatfs_init()
 {
     // FATFS configuration
@@ -465,7 +483,7 @@ int main()
             bool auto_blank_split = spdif_rec_wav::get_auto_blank_split();
             if (auto_blank_split != cfgParam.P_CFG_AUTO_BLANK_SPLIT.get()) {
                 cfgParam.P_CFG_AUTO_BLANK_SPLIT.set(auto_blank_split);
-                if (!cfgParam.finalize()) {
+                if (!_store_config_param()) {
                     printf("ERROR: failed to store auto blank split configuration to flash\r\n");
                     _led_disp_error(main_error_t::FLASH_PROGRAM_ERROR);
                 }
@@ -558,7 +576,7 @@ int main()
                             // store to flash
                             cfgParam.P_CFG_WIFI_SSID.set(ssid);
                             cfgParam.P_CFG_WIFI_PASS.set(pass);
-                            if (cfgParam.finalize()) {
+                            if (_store_config_param()) {
                                 printf("Wi-Fi configuration stored to flash\r\n");
                                 if (run_ntp("UTC+0", t_rtc)) {
                                     aon_timer_set_time_calendar(&t_rtc);

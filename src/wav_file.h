@@ -83,9 +83,10 @@ protected:
     uint64_t                _next_sync_bytes;
     volatile bool           _sync_pending;
 #ifdef TEST_BUILD
+    static constexpr int    TEST_NUM_SYNC_HIST = 6;
     uint32_t                _test_sync_count;
-    uint32_t                _test_sync_long_count;
     uint32_t                _test_sync_max_us;
+    uint32_t                _test_sync_hist[TEST_NUM_SYNC_HIST];  // < 5, 5-10, 10-20, 20-50, 50-100, >= 100 ms
 #endif
 };
 

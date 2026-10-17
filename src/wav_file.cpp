@@ -191,8 +191,8 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
     _sync_pending(false)
 #ifdef TEST_BUILD
     , _test_sync_count(0),
-    _test_sync_long_count(0),
-    _test_sync_max_us(0)
+    _test_sync_max_us(0),
+    _test_sync_hist()
 #endif
 {
     char wav_filename[16];
@@ -368,9 +368,15 @@ void wav_file::sync()
         spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_DATA_SYNC_FAIL);
     }
 #ifdef TEST_BUILD
-    _test_sync_count++;
-    if (_test_max_call.t_us >= TEST_LONG_CALL_US) _test_sync_long_count++;
-    if (_test_max_call.t_us > _test_sync_max_us) _test_sync_max_us = _test_max_call.t_us;
+    {
+        static constexpr uint32_t hist_upper_us[TEST_NUM_SYNC_HIST - 1] = {5000, 10000, 20000, 50000, 100000};
+        const uint32_t t_us = _test_max_call.t_us;
+        int i = 0;
+        while (i < TEST_NUM_SYNC_HIST - 1 && t_us >= hist_upper_us[i]) i++;
+        _test_sync_hist[i]++;
+        _test_sync_count++;
+        if (t_us > _test_sync_max_us) _test_sync_max_us = t_us;
+    }
 #endif
     _sync_pending = false;
 }
@@ -431,8 +437,10 @@ void wav_file::report_final() const
     uint32_t total_sec_dp = static_cast<uint32_t>((total_sec_f - total_sec) * 1e3);
     spdif_rec_wav::log_printf("recorded \"%s\" @ %d bits %5.1f KHz (%6.1f Kbps) total %lu bytes (time:  %d:%02d.%03d)\r\n", _filename.c_str(), _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3, _total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
 #ifdef TEST_BUILD
-    spdif_rec_wav::log_printf("[test] periodic sync of \"%s\": %lu calls, max %lu us, %lu calls over %lu ms\r\n",
-        _filename.c_str(), _test_sync_count, _test_sync_max_us, _test_sync_long_count, TEST_LONG_CALL_US / 1000);
+    spdif_rec_wav::log_printf("[test] periodic sync of \"%s\": %lu calls, max %lu us\r\n",
+        _filename.c_str(), _test_sync_count, _test_sync_max_us);
+    spdif_rec_wav::log_printf("[test]   sync time hist (ms) <5: %lu, 5-10: %lu, 10-20: %lu, 20-50: %lu, 50-100: %lu, >=100: %lu\r\n",
+        _test_sync_hist[0], _test_sync_hist[1], _test_sync_hist[2], _test_sync_hist[3], _test_sync_hist[4], _test_sync_hist[5]);
     spdif_rec_wav::log_printf("[test] spdif queue usage of \"%s\": %7.2f %%\r\n", _filename.c_str(), _worst_queue_ratio * 1e2);
 #endif
     if (spdif_rec_wav::get_verbose()) {

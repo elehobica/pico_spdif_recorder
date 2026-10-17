@@ -192,7 +192,14 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
 #ifdef TEST_BUILD
     , _test_sync_count(0),
     _test_sync_max_us(0),
-    _test_sync_hist()
+    _test_sync_hist(),
+    _test_queue_started(false),
+    _test_queue_start_us(0),
+    _test_queue_ratio_start(0.0f),
+    _test_queue_ratio_after(0.0f),
+    _test_queue_ratio_sync(0.0f),
+    _test_sync_done(false),
+    _test_sync_done_us(0)
 #endif
 {
     char wav_filename[16];
@@ -378,6 +385,10 @@ void wav_file::sync()
         if (t_us > _test_sync_max_us) _test_sync_max_us = t_us;
     }
 #endif
+#ifdef TEST_BUILD
+    _test_sync_done_us = static_cast<uint32_t>(_micros());
+    _test_sync_done = true;
+#endif
     _sync_pending = false;
 }
 
@@ -423,6 +434,19 @@ void wav_file::set_truncate(const float sec)
 void wav_file::record_queue_ratio(float queue_ratio)
 {
     if (queue_ratio > _worst_queue_ratio) _worst_queue_ratio = queue_ratio;
+#ifdef TEST_BUILD
+    // test only: separate worst queue ratio at start of recording, after that and around periodic sync
+    const uint32_t now_us = static_cast<uint32_t>(_micros());
+    if (!_test_queue_started) {
+        _test_queue_started = true;
+        _test_queue_start_us = now_us;
+    }
+    float& worst = (now_us - _test_queue_start_us < TEST_QUEUE_START_US) ? _test_queue_ratio_start : _test_queue_ratio_after;
+    if (queue_ratio > worst) worst = queue_ratio;
+    if (_sync_pending || (_test_sync_done && now_us - _test_sync_done_us < TEST_QUEUE_SYNC_US)) {
+        if (queue_ratio > _test_queue_ratio_sync) _test_queue_ratio_sync = queue_ratio;
+    }
+#endif
 }
 
 void wav_file::report_start() const
@@ -441,7 +465,8 @@ void wav_file::report_final() const
         _filename.c_str(), _test_sync_count, _test_sync_max_us);
     spdif_rec_wav::log_printf("[test]   sync time hist (ms) <5: %lu, 5-10: %lu, 10-20: %lu, 20-50: %lu, 50-100: %lu, >=100: %lu\r\n",
         _test_sync_hist[0], _test_sync_hist[1], _test_sync_hist[2], _test_sync_hist[3], _test_sync_hist[4], _test_sync_hist[5]);
-    spdif_rec_wav::log_printf("[test] spdif queue usage of \"%s\": %7.2f %%\r\n", _filename.c_str(), _worst_queue_ratio * 1e2);
+    spdif_rec_wav::log_printf("[test] spdif queue usage of \"%s\": %6.2f %% (first %lu s: %6.2f %%, after: %6.2f %%, around sync: %6.2f %%)\r\n",
+        _filename.c_str(), _worst_queue_ratio * 1e2, TEST_QUEUE_START_US / 1000000, _test_queue_ratio_start * 1e2, _test_queue_ratio_after * 1e2, _test_queue_ratio_sync * 1e2);
 #endif
     if (spdif_rec_wav::get_verbose()) {
         float avg_bw = static_cast<float>(_total_bytes) / _total_time_us * 1e3;

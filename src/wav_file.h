@@ -87,6 +87,15 @@ protected:
     uint32_t                _test_sync_count;
     uint32_t                _test_sync_max_us;
     uint32_t                _test_sync_hist[TEST_NUM_SYNC_HIST];  // < 5, 5-10, 10-20, 20-50, 50-100, >= 100 ms
+    static constexpr uint32_t TEST_QUEUE_START_US = 1000000;  // period regarded as start of recording
+    static constexpr uint32_t TEST_QUEUE_SYNC_US = 200000;  // period regarded as affected by sync after its completion
+    bool                    _test_queue_started;
+    uint32_t                _test_queue_start_us;
+    float                   _test_queue_ratio_start;
+    float                   _test_queue_ratio_after;
+    float                   _test_queue_ratio_sync;
+    volatile bool           _test_sync_done;
+    volatile uint32_t       _test_sync_done_us;
 #endif
 };
 

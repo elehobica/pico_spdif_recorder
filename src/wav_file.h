@@ -50,12 +50,6 @@ protected:
     // periodic f_sync interval to write FAT chain of exFAT gradually instead of at once in finalize (0: disabled)
     static_assert(PERIODIC_SYNC_MBYTES < 4096, "PERIODIC_SYNC_MBYTES must be less than 4096");
     static constexpr uint32_t PERIODIC_SYNC_BYTES = PERIODIC_SYNC_MBYTES * 1024u * 1024u;
-#ifndef TEST_PRESET_BYTES
-#define TEST_PRESET_BYTES 0
-#endif
-    // test only: preset wav data size by allocating clusters without writing actual data (0: disabled)
-    static_assert(TEST_PRESET_BYTES <= MAX_TOTAL_BYTES, "TEST_PRESET_BYTES exceeds MAX_TOTAL_BYTES");
-    static constexpr uint32_t TEST_PRESET_TOTAL_BYTES = TEST_PRESET_BYTES;
 
     // === Private class functions ===
 
@@ -82,20 +76,5 @@ protected:
     float                   _truncate_sec;
     uint64_t                _next_sync_bytes;
     volatile bool           _sync_pending;
-#ifdef TEST_BUILD
-    static constexpr int    TEST_NUM_SYNC_HIST = 6;
-    uint32_t                _test_sync_count;
-    uint32_t                _test_sync_max_us;
-    uint32_t                _test_sync_hist[TEST_NUM_SYNC_HIST];  // < 5, 5-10, 10-20, 20-50, 50-100, >= 100 ms
-    static constexpr uint32_t TEST_QUEUE_START_US = 1000000;  // period regarded as start of recording
-    static constexpr uint32_t TEST_QUEUE_SYNC_US = 200000;  // period regarded as affected by sync after its completion
-    bool                    _test_queue_started;
-    uint32_t                _test_queue_start_us;
-    float                   _test_queue_ratio_start;
-    float                   _test_queue_ratio_after;
-    float                   _test_queue_ratio_sync;
-    volatile bool           _test_sync_done;
-    volatile uint32_t       _test_sync_done_us;
-#endif
 };
 

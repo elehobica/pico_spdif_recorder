@@ -30,80 +30,30 @@ static inline void _drain_core0_grant()
     wav_file_status::drain_core0_grant();
 }
 
-#ifdef TEST_BUILD
-// test only: measure duration of each FATFS call on core0 to find which call blocks long
-static constexpr uint32_t TEST_LONG_CALL_US = 10000;  // record calls longer than this
-static constexpr int TEST_NUM_LONG_CALLS = 8;
-struct _test_call_record {
-    const char* name;
-    uint32_t    index;
-    uint32_t    t_us;
-};
-static uint32_t _test_call_count = 0;
-static _test_call_record _test_max_call = {};
-static _test_call_record _test_long_calls[TEST_NUM_LONG_CALLS];
-static int _test_num_long_calls = 0;
-struct _test_call_timer {
-    const char* name;
-    uint32_t index = _test_call_count++;
-    uint64_t start_us = _micros();
-    ~_test_call_timer() {
-        _test_call_record rec = {name, index, static_cast<uint32_t>(_micros() - start_us)};
-        if (rec.t_us > _test_max_call.t_us) _test_max_call = rec;
-        if (rec.t_us >= TEST_LONG_CALL_US && _test_num_long_calls < TEST_NUM_LONG_CALLS) _test_long_calls[_test_num_long_calls++] = rec;
-    }
-};
-#define _TEST_MEASURE_CALL() _test_call_timer _test_timer{__func__}
-
-static void _test_reset_calls()
-{
-    _test_call_count = 0;
-    _test_max_call = {"none", 0, 0};
-    _test_num_long_calls = 0;
-}
-
-static void _test_log_calls(const char* op, const char* filename, const uint64_t start_us)
-{
-    spdif_rec_wav::log_printf("[test] %s \"%s\": total %lu ms, %lu FATFS calls, max %lu us (#%lu %s)\r\n",
-        op, filename, static_cast<uint32_t>((_micros() - start_us) / 1000), _test_call_count,
-        _test_max_call.t_us, _test_max_call.index, _test_max_call.name);
-    for (int i = 0; i < _test_num_long_calls; i++) {
-        const _test_call_record& rec = _test_long_calls[i];
-        spdif_rec_wav::log_printf("[test]   long call #%lu %s: %lu us\r\n", rec.index, rec.name, rec.t_us);
-    }
-}
-#else
-#define _TEST_MEASURE_CALL()
-#endif
-
 /*----------------------------------------/
 /  FATFS wrappers for waiting core0 grant
 /----------------------------------------*/
 static inline FRESULT _wrap_f_open(FIL* fp, const TCHAR* path, BYTE mode)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_open(fp, path, mode);
 }
 
 static inline FRESULT _wrap_f_close(FIL* fp)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_close(fp);
 }
 
 static inline FRESULT _wrap_f_read(FIL* fp, void* buff, UINT btr, UINT* br)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_read(fp, buff, btr, br);
 }
 
 static inline FRESULT _wrap_f_write(FIL* fp, const void* buff, UINT btw, UINT* bw)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_write(fp, buff, btw, bw);
 }
 
@@ -116,30 +66,18 @@ static inline FRESULT _wrap_f_write_priority(FIL* fp, const void* buff, UINT btw
 static inline FRESULT _wrap_f_lseek(FIL* fp, FSIZE_t ofs)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_lseek(fp, ofs);
 }
 
 static inline FRESULT _wrap_f_truncate(FIL* fp)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_truncate(fp);
 }
-
-#ifdef TEST_BUILD
-static inline FRESULT _wrap_f_expand(FIL* fp, FSIZE_t fsz, BYTE opt)
-{
-    _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
-    return f_expand(fp, fsz, opt);
-}
-#endif
 
 static inline FRESULT _wrap_f_sync(FIL* fp)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_sync(fp);
 }
 
@@ -152,14 +90,12 @@ static inline FRESULT _wrap_f_sync_priority(FIL* fp)
 static inline FRESULT _wrap_f_unlink(const TCHAR* path)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_unlink(path);
 }
 
 static inline FSIZE_t _wrap_f_tell(FIL* fp)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_tell(fp);
 }
 
@@ -189,27 +125,11 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
     _truncate_sec(0.0f),
     _next_sync_bytes(PERIODIC_SYNC_BYTES),
     _sync_pending(false)
-#ifdef TEST_BUILD
-    , _test_sync_count(0),
-    _test_sync_max_us(0),
-    _test_sync_hist(),
-    _test_queue_started(false),
-    _test_queue_start_us(0),
-    _test_queue_ratio_start(0.0f),
-    _test_queue_ratio_after(0.0f),
-    _test_queue_ratio_sync(0.0f),
-    _test_sync_done(false),
-    _test_sync_done_us(0)
-#endif
 {
     char wav_filename[16];
     sprintf(wav_filename, "%s%03d.wav", WAV_PREFIX, suffix);
     _filename = std::string(wav_filename);
 
-#ifdef TEST_BUILD
-    uint64_t test_start_us = _micros();
-    _test_reset_calls();
-#endif
     _drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
@@ -220,16 +140,6 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
 
         fr = _wrap_f_open(&_fil, _filename.c_str(), FA_WRITE | FA_CREATE_ALWAYS);
         if (fr != FR_OK) break;
-
-#ifdef TEST_BUILD
-        // test only: allocate clusters to emulate large file without writing actual data
-        // skip preset for the file prepared at recording start because core1 blocks until prepared
-        const uint32_t test_preset_bytes = spdif_rec_wav::is_recording() ? TEST_PRESET_TOTAL_BYTES : 0;
-        if (test_preset_bytes > 0) {
-            fr = _wrap_f_expand(&_fil, WAV_HEADER_SIZE + test_preset_bytes, 1);
-            if (fr != FR_OK) break;
-        }
-#endif
 
         // ChunkID
         memcpy(&buf[0], "RIFF", 4);
@@ -272,18 +182,6 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
         fr = _wrap_f_sync(&_fil);
         if (fr != FR_OK) break;
 
-#ifdef TEST_BUILD
-        // test only: move to the end of preset data as if it has been recorded
-        if (test_preset_bytes > 0) {
-            fr = _stepwise_seek(WAV_HEADER_SIZE + test_preset_bytes);
-            if (fr != FR_OK) break;
-            _total_bytes = test_preset_bytes;
-            _next_sync_bytes = static_cast<uint64_t>(_total_bytes) + PERIODIC_SYNC_BYTES;
-        }
-        spdif_rec_wav::log_printf("[test] preset %lu bytes for \"%s\" (periodic sync: %lu MB)\r\n", test_preset_bytes, _filename.c_str(), static_cast<uint32_t>(PERIODIC_SYNC_MBYTES));
-        _test_log_calls("prepare", _filename.c_str(), test_start_us);
-#endif
-
         return;
     }
 
@@ -295,10 +193,6 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
 /-----------------*/
 wav_file::~wav_file()
 {
-#ifdef TEST_BUILD
-    uint64_t test_start_us = _micros();
-    _test_reset_calls();
-#endif
     _drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
@@ -352,10 +246,6 @@ wav_file::~wav_file()
             if (fr != FR_OK) break;
         }
 
-#ifdef TEST_BUILD
-        _test_log_calls("finalize", _filename.c_str(), test_start_us);
-#endif
-
         return;
     }
 
@@ -367,28 +257,10 @@ wav_file::~wav_file()
 /--------------------------*/
 void wav_file::sync()
 {
-#ifdef TEST_BUILD
-    _test_reset_calls();
-#endif
     FRESULT fr = _wrap_f_sync(&_fil);
     if (fr != FR_OK) {
         spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_DATA_SYNC_FAIL);
     }
-#ifdef TEST_BUILD
-    {
-        static constexpr uint32_t hist_upper_us[TEST_NUM_SYNC_HIST - 1] = {5000, 10000, 20000, 50000, 100000};
-        const uint32_t t_us = _test_max_call.t_us;
-        int i = 0;
-        while (i < TEST_NUM_SYNC_HIST - 1 && t_us >= hist_upper_us[i]) i++;
-        _test_sync_hist[i]++;
-        _test_sync_count++;
-        if (t_us > _test_sync_max_us) _test_sync_max_us = t_us;
-    }
-#endif
-#ifdef TEST_BUILD
-    _test_sync_done_us = static_cast<uint32_t>(_micros());
-    _test_sync_done = true;
-#endif
     _sync_pending = false;
 }
 
@@ -434,19 +306,6 @@ void wav_file::set_truncate(const float sec)
 void wav_file::record_queue_ratio(float queue_ratio)
 {
     if (queue_ratio > _worst_queue_ratio) _worst_queue_ratio = queue_ratio;
-#ifdef TEST_BUILD
-    // test only: separate worst queue ratio at start of recording, after that and around periodic sync
-    const uint32_t now_us = static_cast<uint32_t>(_micros());
-    if (!_test_queue_started) {
-        _test_queue_started = true;
-        _test_queue_start_us = now_us;
-    }
-    float& worst = (now_us - _test_queue_start_us < TEST_QUEUE_START_US) ? _test_queue_ratio_start : _test_queue_ratio_after;
-    if (queue_ratio > worst) worst = queue_ratio;
-    if (_sync_pending || (_test_sync_done && now_us - _test_sync_done_us < TEST_QUEUE_SYNC_US)) {
-        if (queue_ratio > _test_queue_ratio_sync) _test_queue_ratio_sync = queue_ratio;
-    }
-#endif
 }
 
 void wav_file::report_start() const
@@ -460,14 +319,6 @@ void wav_file::report_final() const
     uint32_t total_sec = static_cast<uint32_t>(total_sec_f);
     uint32_t total_sec_dp = static_cast<uint32_t>((total_sec_f - total_sec) * 1e3);
     spdif_rec_wav::log_printf("recorded \"%s\" @ %d bits %5.1f KHz (%6.1f Kbps) total %lu bytes (time:  %d:%02d.%03d)\r\n", _filename.c_str(), _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3, _total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
-#ifdef TEST_BUILD
-    spdif_rec_wav::log_printf("[test] periodic sync of \"%s\": %lu calls, max %lu us\r\n",
-        _filename.c_str(), _test_sync_count, _test_sync_max_us);
-    spdif_rec_wav::log_printf("[test]   sync time hist (ms) <5: %lu, 5-10: %lu, 10-20: %lu, 20-50: %lu, 50-100: %lu, >=100: %lu\r\n",
-        _test_sync_hist[0], _test_sync_hist[1], _test_sync_hist[2], _test_sync_hist[3], _test_sync_hist[4], _test_sync_hist[5]);
-    spdif_rec_wav::log_printf("[test] spdif queue usage of \"%s\": %6.2f %% (first %lu s: %6.2f %%, after: %6.2f %%, around sync: %6.2f %%)\r\n",
-        _filename.c_str(), _worst_queue_ratio * 1e2, TEST_QUEUE_START_US / 1000000, _test_queue_ratio_start * 1e2, _test_queue_ratio_after * 1e2, _test_queue_ratio_sync * 1e2);
-#endif
     if (spdif_rec_wav::get_verbose()) {
         float avg_bw = static_cast<float>(_total_bytes) / _total_time_us * 1e3;
         printf("SD Card writing bandwidth\r\n");

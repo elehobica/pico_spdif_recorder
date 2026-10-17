@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+### Added
+* Add periodic `f_sync` of WAV file every 64 MB on core0 to write exFAT FAT chain gradually instead of at once in finalize (configurable by `PERIODIC_SYNC_MBYTES` or `-s` option of `build_docker.sh`, 0 to disable)
+### Fixed
+* Fix audio gap at the beginning of next file after splitting large WAV file (e.g. at 4 GB limit) caused by long FATFS blocking in finalize
+* Fix audio gap and pre-roll corruption at recording start by preparing the first WAV file at standby start
+* Fix `%` in log messages on serial output
 
 ## [1.0.7] - 2026-10-17
 ### Changed

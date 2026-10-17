@@ -46,8 +46,8 @@ public:
     static void set_wait_grant_func(void (*func)());
     static bool is_standby();
     static bool is_recording();
-    static void set_blank_split(const bool flag);
-    static bool get_blank_split();
+    static void set_auto_blank_split(const bool flag);
+    static bool get_auto_blank_split();
     static void set_verbose(const bool flag);
     static bool get_verbose();
     static int get_suffix();
@@ -127,7 +127,7 @@ protected:
     static float _blank_scan_sec;
     static bool _standby_flag;
     static bool _recording_flag;
-    static bool _blank_split;
+    static bool _auto_blank_split;
     static bool _verbose;
     static queue_t _spdif_queue;
     static queue_t _record_cmd_queue;

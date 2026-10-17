@@ -277,7 +277,7 @@ The tool will report errors if:
 
 ### 1. Record with pico_spdif_recorder
 
-Record your album using the pico_spdif_recorder device. Use blank split feature to automatically separate tracks.
+Record your album using the pico_spdif_recorder device. Use auto blank split feature to automatically separate tracks.
 
 ### 2. Create Metadata YAML
 

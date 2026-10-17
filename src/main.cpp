@@ -183,10 +183,10 @@ static void _core1_process()
 static void _show_help(const bits_per_sample_t bits_per_sample)
 {
     printf("---------------------------\r\n");
-    printf(" bit resolution: %d bits\r\n", static_cast<int>(bits_per_sample));
-    printf(" blank split:    %s\r\n", spdif_rec_wav::get_blank_split() ? "on" : "off");
-    printf(" verbose:        %s\r\n", spdif_rec_wav::get_verbose() ? "on" : "off");
-    printf(" suffix to rec:  %03d\r\n", spdif_rec_wav::get_suffix());
+    printf(" bit resolution:   %d bits\r\n", static_cast<int>(bits_per_sample));
+    printf(" auto blank split: %s\r\n", spdif_rec_wav::get_auto_blank_split() ? "on" : "off");
+    printf(" verbose:          %s\r\n", spdif_rec_wav::get_verbose() ? "on" : "off");
+    printf(" suffix to rec:    %03d\r\n", spdif_rec_wav::get_suffix());
     printf("---------------------------\r\n");
     printf("[serial interface help]\r\n");
     printf(" ' ' to start/stop recording\r\n");
@@ -347,7 +347,7 @@ int main()
     bool user_standy = false;
     bool standby_repeat = true;
     bits_per_sample_t bits_per_sample = bits_per_sample_t::_16BITS;
-    bool blank_split_store_pending = false;
+    bool auto_blank_split_store_pending = false;
     int chr;
     // default RTC time
      struct tm t_rtc = {};
@@ -438,7 +438,7 @@ int main()
         return 1;
     }
 
-    spdif_rec_wav::set_blank_split(cfgParam.P_CFG_AUTO_BLANK_SPLIT.get());
+    spdif_rec_wav::set_auto_blank_split(cfgParam.P_CFG_AUTO_BLANK_SPLIT.get());
     spdif_rec_wav::set_wait_grant_func(_led_blink_during_wait);
     // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
@@ -459,14 +459,14 @@ int main()
             printf("ERROR: spdif_rec_wav process_loop exit\r\n");
             break;
         }
-        // store blank split setting to flash only while not recording (flash program stalls core1)
-        if (blank_split_store_pending && !spdif_rec_wav::is_standby() && !spdif_rec_wav::is_recording()) {
-            blank_split_store_pending = false;
-            bool blank_split = spdif_rec_wav::get_blank_split();
-            if (blank_split != cfgParam.P_CFG_AUTO_BLANK_SPLIT.get()) {
-                cfgParam.P_CFG_AUTO_BLANK_SPLIT.set(blank_split);
+        // store auto blank split setting to flash only while not recording (flash program stalls core1)
+        if (auto_blank_split_store_pending && !spdif_rec_wav::is_standby() && !spdif_rec_wav::is_recording()) {
+            auto_blank_split_store_pending = false;
+            bool auto_blank_split = spdif_rec_wav::get_auto_blank_split();
+            if (auto_blank_split != cfgParam.P_CFG_AUTO_BLANK_SPLIT.get()) {
+                cfgParam.P_CFG_AUTO_BLANK_SPLIT.set(auto_blank_split);
                 if (!cfgParam.finalize()) {
-                    printf("ERROR: failed to store blank split configuration to flash\r\n");
+                    printf("ERROR: failed to store auto blank split configuration to flash\r\n");
                     _led_disp_error(main_error_t::FLASH_PROGRAM_ERROR);
                 }
             }
@@ -536,10 +536,10 @@ int main()
                     spdif_rec_wav::split_recording(bits_per_sample);
                 }
             } else if (c == 'b') {
-                bool blank_split = !spdif_rec_wav::get_blank_split();
-                spdif_rec_wav::set_blank_split(blank_split);
-                printf("blank split: %s\r\n", blank_split ? "on" : "off");
-                blank_split_store_pending = true;
+                bool auto_blank_split = !spdif_rec_wav::get_auto_blank_split();
+                spdif_rec_wav::set_auto_blank_split(auto_blank_split);
+                printf("auto blank split: %s\r\n", auto_blank_split ? "on" : "off");
+                auto_blank_split_store_pending = true;
             } else if (c == 'v') {
                 bool verbose = !spdif_rec_wav::get_verbose();
                 spdif_rec_wav::set_verbose(verbose);

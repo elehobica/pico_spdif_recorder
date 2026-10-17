@@ -157,6 +157,6 @@ $ make -j4
 * In case of card mount error or fundamental access errors, please confirm with [FatFs test](lib/pico_fatfs_customized/test)
 
 ## WAV Tagger Tool
-The [wav_tagger](wav_tagger/) directory contains a Python tool for post-processing recorded WAV files. It automatically merges or splits WAV files based on album metadata (YAML format) and adds ID3v2.3 tags with UTF-8 encoding. This tool is particularly useful for organizing WAV files recorded with the blank split feature.
+The [wav_tagger](wav_tagger/) directory contains a Python tool for post-processing recorded WAV files. It automatically merges or splits WAV files based on album metadata (YAML format) and adds ID3v2.3 tags with UTF-8 encoding. This tool is particularly useful for organizing WAV files recorded with the auto blank split feature.
 
 For detailed usage and installation instructions, see [wav_tagger/README.md](wav_tagger/README.md).

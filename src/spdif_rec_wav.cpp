@@ -44,8 +44,8 @@ float          spdif_rec_wav::_severe_blank_sec = 0.0f;
 float          spdif_rec_wav::_blank_scan_sec = 0.0f;
 bool           spdif_rec_wav::_standby_flag = false;
 bool           spdif_rec_wav::_recording_flag = false;
-bool           spdif_rec_wav:: _blank_split = true;
-bool           spdif_rec_wav:: _verbose = false;
+bool           spdif_rec_wav::_auto_blank_split = true;
+bool           spdif_rec_wav::_verbose = false;
 queue_t        spdif_rec_wav::_spdif_queue;
 queue_t        spdif_rec_wav::_record_cmd_queue;
 queue_t        spdif_rec_wav::_error_queue;
@@ -68,14 +68,14 @@ bool spdif_rec_wav::is_recording()
     return _recording_flag;
 }
 
-void spdif_rec_wav::set_blank_split(const bool flag)
+void spdif_rec_wav::set_auto_blank_split(const bool flag)
 {
-    _blank_split = flag;
+    _auto_blank_split = flag;
 }
 
-bool spdif_rec_wav::get_blank_split()
+bool spdif_rec_wav::get_auto_blank_split()
 {
-    return _blank_split;
+    return _auto_blank_split;
 }
 
 void spdif_rec_wav::set_verbose(const bool flag)
@@ -206,7 +206,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                     while (queue_level > 0) {
                         sub_frame_buf_info_t buf_info;
                         // check blank status
-                        if (_blank_split) {
+                        if (_auto_blank_split) {
                             queue_peek_blocking(&_spdif_queue, &buf_info);
                             blank_status_t blank_status = _scan_blank(&_sub_frame_buf[SPDIF_BLOCK_SIZE * buf_info.buf_id], buf_info.sub_frame_count, sample_freq);
                             if (cur.is_data_written()) {

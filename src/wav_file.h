@@ -41,6 +41,12 @@ protected:
     static constexpr int WAV_HEADER_SIZE = 44;
     static constexpr uint32_t MAX_TOTAL_BYTES = 0xfff00000;  // max total bytes of wav data to avoid 32bit overflow
     static constexpr int64_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB
+#ifndef TEST_PRESET_BYTES
+#define TEST_PRESET_BYTES 0
+#endif
+    // test only: preset wav data size by allocating clusters without writing actual data (0: disabled)
+    static_assert(TEST_PRESET_BYTES <= MAX_TOTAL_BYTES, "TEST_PRESET_BYTES exceeds MAX_TOTAL_BYTES");
+    static constexpr uint32_t TEST_PRESET_TOTAL_BYTES = TEST_PRESET_BYTES;
 
     // === Private class functions ===
 

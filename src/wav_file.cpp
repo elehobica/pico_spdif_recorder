@@ -30,30 +30,49 @@ static inline void _drain_core0_grant()
     wav_file_status::drain_core0_grant();
 }
 
+#if TEST_PRESET_BYTES > 0
+// test only: measure max duration of single FATFS call on core0
+static uint32_t _test_max_call_us = 0;
+struct _test_call_timer {
+    uint64_t start_us = _micros();
+    ~_test_call_timer() {
+        uint32_t t_us = static_cast<uint32_t>(_micros() - start_us);
+        if (t_us > _test_max_call_us) _test_max_call_us = t_us;
+    }
+};
+#define _TEST_MEASURE_CALL() _test_call_timer _test_timer
+#else
+#define _TEST_MEASURE_CALL()
+#endif
+
 /*----------------------------------------/
 /  FATFS wrappers for waiting core0 grant
 /----------------------------------------*/
 static inline FRESULT _wrap_f_open(FIL* fp, const TCHAR* path, BYTE mode)
 {
     _blocking_wait_core0_grant();
+    _TEST_MEASURE_CALL();
     return f_open(fp, path, mode);
 }
 
 static inline FRESULT _wrap_f_close(FIL* fp)
 {
     _blocking_wait_core0_grant();
+    _TEST_MEASURE_CALL();
     return f_close(fp);
 }
 
 static inline FRESULT _wrap_f_read(FIL* fp, void* buff, UINT btr, UINT* br)
 {
     _blocking_wait_core0_grant();
+    _TEST_MEASURE_CALL();
     return f_read(fp, buff, btr, br);
 }
 
 static inline FRESULT _wrap_f_write(FIL* fp, const void* buff, UINT btw, UINT* bw)
 {
     _blocking_wait_core0_grant();
+    _TEST_MEASURE_CALL();
     return f_write(fp, buff, btw, bw);
 }
 
@@ -66,18 +85,30 @@ static inline FRESULT _wrap_f_write_priority(FIL* fp, const void* buff, UINT btw
 static inline FRESULT _wrap_f_lseek(FIL* fp, FSIZE_t ofs)
 {
     _blocking_wait_core0_grant();
+    _TEST_MEASURE_CALL();
     return f_lseek(fp, ofs);
 }
 
 static inline FRESULT _wrap_f_truncate(FIL* fp)
 {
     _blocking_wait_core0_grant();
+    _TEST_MEASURE_CALL();
     return f_truncate(fp);
 }
+
+#if TEST_PRESET_BYTES > 0
+static inline FRESULT _wrap_f_expand(FIL* fp, FSIZE_t fsz, BYTE opt)
+{
+    _blocking_wait_core0_grant();
+    _TEST_MEASURE_CALL();
+    return f_expand(fp, fsz, opt);
+}
+#endif
 
 static inline FRESULT _wrap_f_sync(FIL* fp)
 {
     _blocking_wait_core0_grant();
+    _TEST_MEASURE_CALL();
     return f_sync(fp);
 }
 
@@ -90,12 +121,14 @@ static inline FRESULT _wrap_f_sync_priority(FIL* fp)
 static inline FRESULT _wrap_f_unlink(const TCHAR* path)
 {
     _blocking_wait_core0_grant();
+    _TEST_MEASURE_CALL();
     return f_unlink(path);
 }
 
 static inline FSIZE_t _wrap_f_tell(FIL* fp)
 {
     _blocking_wait_core0_grant();
+    _TEST_MEASURE_CALL();
     return f_tell(fp);
 }
 
@@ -128,6 +161,10 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
     sprintf(wav_filename, "%s%03d.wav", WAV_PREFIX, suffix);
     _filename = std::string(wav_filename);
 
+#if TEST_PRESET_BYTES > 0
+    uint64_t test_start_us = _micros();
+    _test_max_call_us = 0;
+#endif
     _drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
@@ -138,6 +175,12 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
 
         fr = _wrap_f_open(&_fil, _filename.c_str(), FA_WRITE | FA_CREATE_ALWAYS);
         if (fr != FR_OK) break;
+
+#if TEST_PRESET_BYTES > 0
+        // test only: allocate clusters to emulate large file without writing actual data
+        fr = _wrap_f_expand(&_fil, WAV_HEADER_SIZE + TEST_PRESET_TOTAL_BYTES, 1);
+        if (fr != FR_OK) break;
+#endif
 
         // ChunkID
         memcpy(&buf[0], "RIFF", 4);
@@ -180,6 +223,15 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
         fr = _wrap_f_sync(&_fil);
         if (fr != FR_OK) break;
 
+#if TEST_PRESET_BYTES > 0
+        // test only: move to the end of preset data as if it has been recorded
+        fr = _stepwise_seek(WAV_HEADER_SIZE + TEST_PRESET_TOTAL_BYTES);
+        if (fr != FR_OK) break;
+        _total_bytes = TEST_PRESET_TOTAL_BYTES;
+        spdif_rec_wav::log_printf("[test] prepare \"%s\" with preset %lu bytes: total %lu ms, max FATFS call %lu us\r\n",
+            _filename.c_str(), TEST_PRESET_TOTAL_BYTES, static_cast<uint32_t>((_micros() - test_start_us) / 1000), _test_max_call_us);
+#endif
+
         return;
     }
 
@@ -191,6 +243,10 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
 /-----------------*/
 wav_file::~wav_file()
 {
+#if TEST_PRESET_BYTES > 0
+    uint64_t test_start_us = _micros();
+    _test_max_call_us = 0;
+#endif
     _drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
@@ -243,6 +299,11 @@ wav_file::~wav_file()
             fr = _wrap_f_close(&_fil);
             if (fr != FR_OK) break;
         }
+
+#if TEST_PRESET_BYTES > 0
+        spdif_rec_wav::log_printf("[test] finalize \"%s\": total %lu ms, max FATFS call %lu us\r\n",
+            _filename.c_str(), static_cast<uint32_t>((_micros() - test_start_us) / 1000), _test_max_call_us);
+#endif
 
         return;
     }
@@ -300,6 +361,9 @@ void wav_file::report_final() const
     uint32_t total_sec = static_cast<uint32_t>(total_sec_f);
     uint32_t total_sec_dp = static_cast<uint32_t>((total_sec_f - total_sec) * 1e3);
     spdif_rec_wav::log_printf("recorded \"%s\" @ %d bits %5.1f KHz (%6.1f Kbps) total %lu bytes (time:  %d:%02d.%03d)\r\n", _filename.c_str(), _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3, _total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
+#if TEST_PRESET_BYTES > 0
+    spdif_rec_wav::log_printf("[test] spdif queue usage of \"%s\": %7.2f %%\r\n", _filename.c_str(), _worst_queue_ratio * 1e2);
+#endif
     if (spdif_rec_wav::get_verbose()) {
         float avg_bw = static_cast<float>(_total_bytes) / _total_time_us * 1e3;
         printf("SD Card writing bandwidth\r\n");

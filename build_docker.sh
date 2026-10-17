@@ -26,17 +26,25 @@ Targets:
 Options:
   -h, --help     Show this help
   -k, --keep     Keep build directory contents (incremental build)
+  -t, --test-preset BYTES
+                 Test build to preset wav data size of each file (output: build_test/, build2_test/)
+                 e.g. 4259358720 = 0xfff00000 - 60 sec of 96 KHz 24bit (576000 bytes/sec)
 EOF
 }
 
 TARGET=all
 KEEP=0
+TEST_PRESET=
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     pico|pico2|all) TARGET="$1" ;;
     -h|--help)      usage; exit 0 ;;
     -k|--keep)      KEEP=1 ;;
+    -t|--test-preset)
+      shift
+      if [[ ! "$1" =~ ^[0-9]+$ ]]; then echo "Invalid test preset bytes: $1" >&2; usage; exit 1; fi
+      TEST_PRESET="$1" ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
   shift
@@ -66,19 +74,25 @@ run_build() {
 }
 
 BUILT_DIRS=()
+DIR_SUFFIX=
+TEST_OPT=
+if [[ -n "$TEST_PRESET" ]]; then
+  DIR_SUFFIX=_test
+  TEST_OPT="-DTEST_PRESET_BYTES=$TEST_PRESET"
+fi
 
 case "$TARGET" in
   pico|all)
     echo "===== Build Pico (rp2040) ====="
-    run_build build ""
-    BUILT_DIRS+=(build)
+    run_build build$DIR_SUFFIX "$TEST_OPT"
+    BUILT_DIRS+=(build$DIR_SUFFIX)
     ;;
 esac
 case "$TARGET" in
   pico2|all)
     echo "===== Build Pico 2 (rp2350) ====="
-    run_build build2 "-DPICO_PLATFORM=rp2350 -DPICO_BOARD=pico2"
-    BUILT_DIRS+=(build2)
+    run_build build2$DIR_SUFFIX "-DPICO_PLATFORM=rp2350 -DPICO_BOARD=pico2 $TEST_OPT"
+    BUILT_DIRS+=(build2$DIR_SUFFIX)
     ;;
 esac
 

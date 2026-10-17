@@ -54,6 +54,12 @@ target_link_libraries(${PROJECT_NAME}
     picow_config_wifi
 )
 
+# test only: preset wav data size to emulate large file (e.g. -DTEST_PRESET_BYTES=4259358720)
+if(TEST_PRESET_BYTES)
+    message(WARNING "TEST BUILD: TEST_PRESET_BYTES=${TEST_PRESET_BYTES} (not for release)")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE TEST_PRESET_BYTES=${TEST_PRESET_BYTES}u)
+endif()
+
 pico_enable_stdio_usb(${PROJECT_NAME} 1)
 pico_enable_stdio_uart(${PROJECT_NAME} 0)
 

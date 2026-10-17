@@ -14,6 +14,7 @@ typedef enum {
     CFG_ID_VERSION = FlashParamNs::CFG_ID_BASE,
     CFG_ID_WIFI_SSID,
     CFG_ID_WIFI_PASS,
+    CFG_ID_AUTO_BLANK_SPLIT,
 } ParamId_t;
 
 //=================================
@@ -25,10 +26,11 @@ struct ConfigParam : FlashParamNs::FlashParam
         static ConfigParam instance;
         return instance;
     }
-    // Parameter<T>                      instance        id                name             default size
-    FlashParamNs::Parameter<std::string> P_CFG_VERSION  {CFG_ID_VERSION,   "CFG_VERSION",   "0.0.0", 16};
-    FlashParamNs::Parameter<std::string> P_CFG_WIFI_SSID{CFG_ID_WIFI_SSID, "CFG_WIFI_SSID", "",      16};
-    FlashParamNs::Parameter<std::string> P_CFG_WIFI_PASS{CFG_ID_WIFI_PASS, "CFG_WIFI_PASS", "",      16};
+    // Parameter<T>                      instance                id                       name                    default size
+    FlashParamNs::Parameter<std::string> P_CFG_VERSION          {CFG_ID_VERSION,          "CFG_VERSION",          "0.0.0", 16};
+    FlashParamNs::Parameter<std::string> P_CFG_WIFI_SSID        {CFG_ID_WIFI_SSID,        "CFG_WIFI_SSID",        "",      16};
+    FlashParamNs::Parameter<std::string> P_CFG_WIFI_PASS        {CFG_ID_WIFI_PASS,        "CFG_WIFI_PASS",        "",      16};
+    FlashParamNs::Parameter<bool>        P_CFG_AUTO_BLANK_SPLIT {CFG_ID_AUTO_BLANK_SPLIT, "CFG_AUTO_BLANK_SPLIT", true};
 
     void initialize(bool preserveStoreCount = false) override {
         FlashParamNs::FlashParam::initialize(preserveStoreCount);

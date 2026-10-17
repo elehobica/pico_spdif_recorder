@@ -109,16 +109,16 @@ $ make -j4
 ## Serial command interface
 * Serial interface is available from USB port of Raspberry Pi Pico.
 
-| Key | Function |
-----|----
-| Space | Recording Start Standby / Recording Stop |
-| r | Resolution change 16bit/24bit (default: 16bit) |
-| s | Manual split |
-| b | Auto blank split on/off (default: on) |
-| v | Verbose for monitoring messages |
-| c | Clear WAV file suffix to 1 |
-| w | Configure Wi-Fi (for Raspberry Pi Pico W only) |
-| h | Help |
+| Key | Function | Persistence |
+----|----|----
+| Space | Recording Start Standby / Recording Stop | |
+| r | Resolution change 16bit/24bit (default: 16bit) | |
+| s | Manual split | |
+| b | Auto blank split on/off (default: on) | Stored to flash (deferred until recording is stopped) |
+| v | Verbose for monitoring messages | |
+| c | Clear WAV file suffix to 1 | |
+| w | Configure Wi-Fi (for Raspberry Pi Pico W only) | Stored to flash when Wi-Fi connection succeeds |
+| h | Help | |
 
 ### Recording start/stop/split features
 * Standby recording start while silence and auto start when sound detected

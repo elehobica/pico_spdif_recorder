@@ -345,6 +345,7 @@ int main()
     bool user_standy = false;
     bool standby_repeat = true;
     bits_per_sample_t bits_per_sample = bits_per_sample_t::_16BITS;
+    bool blank_split_store_pending = false;
     int chr;
     // default RTC time
      struct tm t_rtc = {};
@@ -435,6 +436,7 @@ int main()
         return 1;
     }
 
+    spdif_rec_wav::set_blank_split(cfgParam.P_CFG_AUTO_BLANK_SPLIT.get());
     spdif_rec_wav::set_wait_grant_func(_led_blink_during_wait);
     // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
@@ -454,6 +456,18 @@ int main()
         if (!core1_running) {
             printf("ERROR: spdif_rec_wav process_loop exit\r\n");
             break;
+        }
+        // store blank split setting to flash only while not recording (flash program stalls core1)
+        if (blank_split_store_pending && !spdif_rec_wav::is_standby() && !spdif_rec_wav::is_recording()) {
+            blank_split_store_pending = false;
+            bool blank_split = spdif_rec_wav::get_blank_split();
+            if (blank_split != cfgParam.P_CFG_AUTO_BLANK_SPLIT.get()) {
+                cfgParam.P_CFG_AUTO_BLANK_SPLIT.set(blank_split);
+                if (!cfgParam.finalize()) {
+                    printf("ERROR: failed to store blank split configuration to flash\r\n");
+                    _led_disp_error(main_error_t::FLASH_PROGRAM_ERROR);
+                }
+            }
         }
         if (stable_flg) {
             stable_flg = false;
@@ -523,6 +537,7 @@ int main()
                 bool blank_split = !spdif_rec_wav::get_blank_split();
                 spdif_rec_wav::set_blank_split(blank_split);
                 printf("blank split: %s\r\n", blank_split ? "on" : "off");
+                blank_split_store_pending = true;
             } else if (c == 'v') {
                 bool verbose = !spdif_rec_wav::get_verbose();
                 spdif_rec_wav::set_verbose(verbose);

@@ -31,16 +31,47 @@ static inline void _drain_core0_grant()
 }
 
 #if TEST_PRESET_BYTES > 0
-// test only: measure max duration of single FATFS call on core0
-static uint32_t _test_max_call_us = 0;
+// test only: measure duration of each FATFS call on core0 to find which call blocks long
+static constexpr uint32_t TEST_LONG_CALL_US = 10000;  // record calls longer than this
+static constexpr int TEST_NUM_LONG_CALLS = 8;
+struct _test_call_record {
+    const char* name;
+    uint32_t    index;
+    uint32_t    t_us;
+};
+static uint32_t _test_call_count = 0;
+static _test_call_record _test_max_call = {};
+static _test_call_record _test_long_calls[TEST_NUM_LONG_CALLS];
+static int _test_num_long_calls = 0;
 struct _test_call_timer {
+    const char* name;
+    uint32_t index = _test_call_count++;
     uint64_t start_us = _micros();
     ~_test_call_timer() {
-        uint32_t t_us = static_cast<uint32_t>(_micros() - start_us);
-        if (t_us > _test_max_call_us) _test_max_call_us = t_us;
+        _test_call_record rec = {name, index, static_cast<uint32_t>(_micros() - start_us)};
+        if (rec.t_us > _test_max_call.t_us) _test_max_call = rec;
+        if (rec.t_us >= TEST_LONG_CALL_US && _test_num_long_calls < TEST_NUM_LONG_CALLS) _test_long_calls[_test_num_long_calls++] = rec;
     }
 };
-#define _TEST_MEASURE_CALL() _test_call_timer _test_timer
+#define _TEST_MEASURE_CALL() _test_call_timer _test_timer{__func__}
+
+static void _test_reset_calls()
+{
+    _test_call_count = 0;
+    _test_max_call = {"none", 0, 0};
+    _test_num_long_calls = 0;
+}
+
+static void _test_log_calls(const char* op, const char* filename, const uint64_t start_us)
+{
+    spdif_rec_wav::log_printf("[test] %s \"%s\": total %lu ms, %lu FATFS calls, max %lu us (#%lu %s)\r\n",
+        op, filename, static_cast<uint32_t>((_micros() - start_us) / 1000), _test_call_count,
+        _test_max_call.t_us, _test_max_call.index, _test_max_call.name);
+    for (int i = 0; i < _test_num_long_calls; i++) {
+        const _test_call_record& rec = _test_long_calls[i];
+        spdif_rec_wav::log_printf("[test]   long call #%lu %s: %lu us\r\n", rec.index, rec.name, rec.t_us);
+    }
+}
 #else
 #define _TEST_MEASURE_CALL()
 #endif
@@ -163,7 +194,7 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
 
 #if TEST_PRESET_BYTES > 0
     uint64_t test_start_us = _micros();
-    _test_max_call_us = 0;
+    _test_reset_calls();
 #endif
     _drain_core0_grant();
     for ( ; ; ) {
@@ -234,8 +265,8 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
             if (fr != FR_OK) break;
             _total_bytes = test_preset_bytes;
         }
-        spdif_rec_wav::log_printf("[test] prepare \"%s\" with preset %lu bytes: total %lu ms, max FATFS call %lu us\r\n",
-            _filename.c_str(), test_preset_bytes, static_cast<uint32_t>((_micros() - test_start_us) / 1000), _test_max_call_us);
+        spdif_rec_wav::log_printf("[test] preset %lu bytes for \"%s\"\r\n", test_preset_bytes, _filename.c_str());
+        _test_log_calls("prepare", _filename.c_str(), test_start_us);
 #endif
 
         return;
@@ -251,7 +282,7 @@ wav_file::~wav_file()
 {
 #if TEST_PRESET_BYTES > 0
     uint64_t test_start_us = _micros();
-    _test_max_call_us = 0;
+    _test_reset_calls();
 #endif
     _drain_core0_grant();
     for ( ; ; ) {
@@ -307,8 +338,7 @@ wav_file::~wav_file()
         }
 
 #if TEST_PRESET_BYTES > 0
-        spdif_rec_wav::log_printf("[test] finalize \"%s\": total %lu ms, max FATFS call %lu us\r\n",
-            _filename.c_str(), static_cast<uint32_t>((_micros() - test_start_us) / 1000), _test_max_call_us);
+        _test_log_calls("finalize", _filename.c_str(), test_start_us);
 #endif
 
         return;

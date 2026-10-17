@@ -178,8 +178,12 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
 
 #if TEST_PRESET_BYTES > 0
         // test only: allocate clusters to emulate large file without writing actual data
-        fr = _wrap_f_expand(&_fil, WAV_HEADER_SIZE + TEST_PRESET_TOTAL_BYTES, 1);
-        if (fr != FR_OK) break;
+        // skip preset for the file prepared at recording start because core1 blocks until prepared
+        const uint32_t test_preset_bytes = spdif_rec_wav::is_recording() ? TEST_PRESET_TOTAL_BYTES : 0;
+        if (test_preset_bytes > 0) {
+            fr = _wrap_f_expand(&_fil, WAV_HEADER_SIZE + test_preset_bytes, 1);
+            if (fr != FR_OK) break;
+        }
 #endif
 
         // ChunkID
@@ -225,11 +229,13 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
 
 #if TEST_PRESET_BYTES > 0
         // test only: move to the end of preset data as if it has been recorded
-        fr = _stepwise_seek(WAV_HEADER_SIZE + TEST_PRESET_TOTAL_BYTES);
-        if (fr != FR_OK) break;
-        _total_bytes = TEST_PRESET_TOTAL_BYTES;
+        if (test_preset_bytes > 0) {
+            fr = _stepwise_seek(WAV_HEADER_SIZE + test_preset_bytes);
+            if (fr != FR_OK) break;
+            _total_bytes = test_preset_bytes;
+        }
         spdif_rec_wav::log_printf("[test] prepare \"%s\" with preset %lu bytes: total %lu ms, max FATFS call %lu us\r\n",
-            _filename.c_str(), TEST_PRESET_TOTAL_BYTES, static_cast<uint32_t>((_micros() - test_start_us) / 1000), _test_max_call_us);
+            _filename.c_str(), test_preset_bytes, static_cast<uint32_t>((_micros() - test_start_us) / 1000), _test_max_call_us);
 #endif
 
         return;
@@ -390,11 +396,17 @@ bool wav_file::is_data_written() const
 /-----------------------------*/
 FRESULT wav_file::_stepwise_seek(const DWORD pos)
 {
-    FRESULT fr;     /* FatFs return code */
+    FRESULT fr = FR_OK;     /* FatFs return code */
 
     int64_t target_pos = static_cast<int64_t>(pos);
     int64_t cur_pos    = static_cast<int64_t>(_wrap_f_tell(&_fil));
     int64_t diff       = target_pos - cur_pos;
+
+    // backward seek: FATFS always follows the cluster chain from the head of the file,
+    // therefore stepwise seek doesn't reduce the time for each step, but multiplies the total time
+    if (diff < 0) {
+        return _wrap_f_lseek(&_fil, static_cast<DWORD>(target_pos));
+    }
 
     while (cur_pos != target_pos) {
         if (diff >= 0) {

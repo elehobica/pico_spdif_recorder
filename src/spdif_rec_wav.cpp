@@ -383,7 +383,7 @@ void spdif_rec_wav::log_printf(const char* fmt, ...)
     va_end(va);
 
     // print on serial
-    printf(buff);
+    printf("%s", buff);
 
     // print on log file
     for ( ; ; ) {

@@ -228,6 +228,9 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                         if (queue_level == 1 || buf_info.buf_id >= NUM_SUB_FRAME_BUF - 1 || buf_accum >= NUM_SUB_FRAME_BUF/2) {
                             uint32_t sub_frame_count = buf_info.sub_frame_count * buf_accum;
                             cur.write(buf_ptr, sub_frame_count);
+                            if (cur.is_sync_required()) {
+                                cur.req_sync();  // f_sync on core0 when granted
+                            }
                             // update head of buffer to write
                             buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF)];
                             buf_accum = 0;

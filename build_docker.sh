@@ -27,14 +27,17 @@ Options:
   -h, --help     Show this help
   -k, --keep     Keep build directory contents (incremental build)
   -t, --test-preset BYTES
-                 Test build to preset wav data size of each file (output: build_test/, build2_test/)
-                 e.g. 4259358720 = 0xfff00000 - 60 sec of 96 KHz 24bit (576000 bytes/sec)
+                 Test build with test logs to preset wav data size of each file (output: build_test/, build2_test/)
+                 e.g. 4259358720 = 0xfff00000 - 60 sec of 96 KHz 24bit (576000 bytes/sec), 0 = no preset
+  -s, --sync-interval MBYTES
+                 Periodic f_sync interval of wav file in MB (default: 0 = disabled)
 EOF
 }
 
 TARGET=all
 KEEP=0
 TEST_PRESET=
+SYNC_MBYTES=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -45,6 +48,10 @@ while [[ $# -gt 0 ]]; do
       shift
       if [[ ! "$1" =~ ^[0-9]+$ ]]; then echo "Invalid test preset bytes: $1" >&2; usage; exit 1; fi
       TEST_PRESET="$1" ;;
+    -s|--sync-interval)
+      shift
+      if [[ ! "$1" =~ ^[0-9]+$ ]]; then echo "Invalid sync interval: $1" >&2; usage; exit 1; fi
+      SYNC_MBYTES="$1" ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
   shift
@@ -75,23 +82,23 @@ run_build() {
 
 BUILT_DIRS=()
 DIR_SUFFIX=
-TEST_OPT=
+CMAKE_OPT="-DPERIODIC_SYNC_MBYTES=$SYNC_MBYTES"
 if [[ -n "$TEST_PRESET" ]]; then
   DIR_SUFFIX=_test
-  TEST_OPT="-DTEST_PRESET_BYTES=$TEST_PRESET"
+  CMAKE_OPT="$CMAKE_OPT -DTEST_PRESET_BYTES=$TEST_PRESET"
 fi
 
 case "$TARGET" in
   pico|all)
     echo "===== Build Pico (rp2040) ====="
-    run_build build$DIR_SUFFIX "$TEST_OPT"
+    run_build build$DIR_SUFFIX "$CMAKE_OPT"
     BUILT_DIRS+=(build$DIR_SUFFIX)
     ;;
 esac
 case "$TARGET" in
   pico2|all)
     echo "===== Build Pico 2 (rp2350) ====="
-    run_build build2$DIR_SUFFIX "-DPICO_PLATFORM=rp2350 -DPICO_BOARD=pico2 $TEST_OPT"
+    run_build build2$DIR_SUFFIX "-DPICO_PLATFORM=rp2350 -DPICO_BOARD=pico2 $CMAKE_OPT"
     BUILT_DIRS+=(build2$DIR_SUFFIX)
     ;;
 esac

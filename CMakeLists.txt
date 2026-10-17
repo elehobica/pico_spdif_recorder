@@ -54,10 +54,16 @@ target_link_libraries(${PROJECT_NAME}
     picow_config_wifi
 )
 
-# test only: preset wav data size to emulate large file (e.g. -DTEST_PRESET_BYTES=4259358720)
-if(TEST_PRESET_BYTES)
+# periodic f_sync interval in MB to write FAT chain gradually (0: disabled)
+if(PERIODIC_SYNC_MBYTES)
+    message(STATUS "PERIODIC_SYNC_MBYTES=${PERIODIC_SYNC_MBYTES}")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE PERIODIC_SYNC_MBYTES=${PERIODIC_SYNC_MBYTES}u)
+endif()
+
+# test only: enable test logs and preset wav data size to emulate large file (e.g. -DTEST_PRESET_BYTES=4259358720, 0: no preset)
+if(DEFINED TEST_PRESET_BYTES)
     message(WARNING "TEST BUILD: TEST_PRESET_BYTES=${TEST_PRESET_BYTES} (not for release)")
-    target_compile_definitions(${PROJECT_NAME} PRIVATE TEST_PRESET_BYTES=${TEST_PRESET_BYTES}u)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE TEST_BUILD TEST_PRESET_BYTES=${TEST_PRESET_BYTES}u)
 endif()
 
 pico_enable_stdio_usb(${PROJECT_NAME} 1)

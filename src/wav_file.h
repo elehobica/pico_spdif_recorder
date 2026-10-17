@@ -25,8 +25,11 @@ public:
     virtual ~wav_file();
 
     // === Public member functions ===
+    // functions called from core0
+    void sync();
     // functions called from core1
     uint32_t write(const uint32_t* buff, const uint32_t sub_frame_count);
+    bool is_sync_required();
     void set_truncate(const float sec);
     void record_queue_ratio(float queue_ratio);
     void report_start() const;
@@ -41,6 +44,12 @@ protected:
     static constexpr int WAV_HEADER_SIZE = 44;
     static constexpr uint32_t MAX_TOTAL_BYTES = 0xfff00000;  // max total bytes of wav data to avoid 32bit overflow
     static constexpr int64_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB
+#ifndef PERIODIC_SYNC_MBYTES
+#define PERIODIC_SYNC_MBYTES 0
+#endif
+    // periodic f_sync interval to write FAT chain of exFAT gradually instead of at once in finalize (0: disabled)
+    static_assert(PERIODIC_SYNC_MBYTES < 4096, "PERIODIC_SYNC_MBYTES must be less than 4096");
+    static constexpr uint32_t PERIODIC_SYNC_BYTES = PERIODIC_SYNC_MBYTES * 1024u * 1024u;
 #ifndef TEST_PRESET_BYTES
 #define TEST_PRESET_BYTES 0
 #endif
@@ -71,5 +80,12 @@ protected:
     float                   _worst_queue_ratio;
     bool                    _data_written;
     float                   _truncate_sec;
+    uint64_t                _next_sync_bytes;
+    volatile bool           _sync_pending;
+#ifdef TEST_BUILD
+    uint32_t                _test_sync_count;
+    uint32_t                _test_sync_long_count;
+    uint32_t                _test_sync_max_us;
+#endif
 };
 

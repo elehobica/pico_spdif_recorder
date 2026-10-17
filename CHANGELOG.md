@@ -5,10 +5,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [1.0.7] - 2026-10-17
 ### Changed
 * Support pico-sdk 2.3.0
 * Support persistence for auto blank split function as `CFG_AUTO_BLANK_SPLIT`
 * Move firmware version from flash parameter to constant `APP_VERSION` in `src/version.h`
+### Fixed
+* Reject Wi-Fi configuration command while recording to avoid flash programming during recording
 
 ## [1.0.6] - 2026-06-08
 ### Added

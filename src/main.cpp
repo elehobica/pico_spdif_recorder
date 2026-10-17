@@ -192,7 +192,7 @@ static void _show_help(const bits_per_sample_t bits_per_sample)
     printf(" ' ' to start/stop recording\r\n");
     printf(" 'r' to switch 16/24 bits\r\n");
     printf(" 's' to manual split (*1)\r\n");
-    printf(" 'b' to toggle auto blank split\r\n");
+    printf(" 'b' to toggle auto blank split (*3)\r\n");
     printf(" 'v' to toggle verbose\r\n");
     printf(" 'c' to clear suffix (*2)\r\n");
     if (picoW) {
@@ -201,6 +201,7 @@ static void _show_help(const bits_per_sample_t bits_per_sample)
     printf(" 'h' to show this help\r\n");
     printf("  (*1) only while recording\r\n");
     printf("  (*2) only while not recording\r\n");
+    printf("  (*3) persistence pending while recording\r\n");
     printf("---------------------------\r\n");
 }
 
@@ -549,25 +550,27 @@ int main()
                     printf("suffix to rec: %03d\r\n", spdif_rec_wav::get_suffix());
                 }
             } else if (c == 'w' && picoW) {
-                std::string ssid, pass;
-                if (config_wifi(ssid, pass)) {
-                    // trial to connect Wi-Fi
-                    if (_connect_wifi(ssid, pass)) {
-                        // store to flash
-                        cfgParam.P_CFG_WIFI_SSID.set(ssid);
-                        cfgParam.P_CFG_WIFI_PASS.set(pass);
-                        if (cfgParam.finalize()) {
-                            printf("Wi-Fi configuration stored to flash\r\n");
-                            if (run_ntp("UTC+0", t_rtc)) {
-                                aon_timer_set_time_calendar(&t_rtc);
+                if (!spdif_rec_wav::is_standby() && !spdif_rec_wav::is_recording()) {
+                    std::string ssid, pass;
+                    if (config_wifi(ssid, pass)) {
+                        // trial to connect Wi-Fi
+                        if (_connect_wifi(ssid, pass)) {
+                            // store to flash
+                            cfgParam.P_CFG_WIFI_SSID.set(ssid);
+                            cfgParam.P_CFG_WIFI_PASS.set(pass);
+                            if (cfgParam.finalize()) {
+                                printf("Wi-Fi configuration stored to flash\r\n");
+                                if (run_ntp("UTC+0", t_rtc)) {
+                                    aon_timer_set_time_calendar(&t_rtc);
+                                }
+                            } else {
+                                printf("ERROR: failed to store Wi-Fi configuration to flash\r\n");
+                                _led_disp_error(main_error_t::FLASH_PROGRAM_ERROR);
                             }
                         } else {
-                            printf("ERROR: failed to store Wi-Fi configuration to flash\r\n");
-                            _led_disp_error(main_error_t::FLASH_PROGRAM_ERROR);
+                            printf("ERROR: failed Wi-Fi connection: %s\r\n", ssid.c_str());
+                            _led_disp_error(main_error_t::WIFI_CONNECTION_ERROR);
                         }
-                    } else {
-                        printf("ERROR: failed Wi-Fi connection: %s\r\n", ssid.c_str());
-                        _led_disp_error(main_error_t::WIFI_CONNECTION_ERROR);
                     }
                 }
             } else if (c == 'h') {

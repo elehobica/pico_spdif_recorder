@@ -54,8 +54,8 @@ target_link_libraries(${PROJECT_NAME}
     picow_config_wifi
 )
 
-# periodic f_sync interval in MB to write FAT chain gradually (0: disabled)
-if(PERIODIC_SYNC_MBYTES)
+# periodic f_sync interval in MB to write FAT chain gradually (default: 64 in wav_file.h, 0: disabled)
+if(DEFINED PERIODIC_SYNC_MBYTES)
     message(STATUS "PERIODIC_SYNC_MBYTES=${PERIODIC_SYNC_MBYTES}")
     target_compile_definitions(${PROJECT_NAME} PRIVATE PERIODIC_SYNC_MBYTES=${PERIODIC_SYNC_MBYTES}u)
 endif()

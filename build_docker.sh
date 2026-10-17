@@ -30,14 +30,14 @@ Options:
                  Test build with test logs to preset wav data size of each file (output: build_test/, build2_test/)
                  e.g. 4259358720 = 0xfff00000 - 60 sec of 96 KHz 24bit (576000 bytes/sec), 0 = no preset
   -s, --sync-interval MBYTES
-                 Periodic f_sync interval of wav file in MB (default: 0 = disabled)
+                 Periodic f_sync interval of wav file in MB (default: 64, 0 = disabled)
 EOF
 }
 
 TARGET=all
 KEEP=0
 TEST_PRESET=
-SYNC_MBYTES=0
+SYNC_MBYTES=
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -82,7 +82,11 @@ run_build() {
 
 BUILT_DIRS=()
 DIR_SUFFIX=
-CMAKE_OPT="-DPERIODIC_SYNC_MBYTES=$SYNC_MBYTES"
+if [[ -n "$SYNC_MBYTES" ]]; then
+  CMAKE_OPT="-DPERIODIC_SYNC_MBYTES=$SYNC_MBYTES"
+else
+  CMAKE_OPT="-UPERIODIC_SYNC_MBYTES"  # clear cached value to use default
+fi
 if [[ -n "$TEST_PRESET" ]]; then
   DIR_SUFFIX=_test
   CMAKE_OPT="$CMAKE_OPT -DTEST_PRESET_BYTES=$TEST_PRESET"

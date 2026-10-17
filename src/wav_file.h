@@ -45,7 +45,7 @@ protected:
     static constexpr uint32_t MAX_TOTAL_BYTES = 0xfff00000;  // max total bytes of wav data to avoid 32bit overflow
     static constexpr int64_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB
 #ifndef PERIODIC_SYNC_MBYTES
-#define PERIODIC_SYNC_MBYTES 0
+#define PERIODIC_SYNC_MBYTES 64
 #endif
     // periodic f_sync interval to write FAT chain of exFAT gradually instead of at once in finalize (0: disabled)
     static_assert(PERIODIC_SYNC_MBYTES < 4096, "PERIODIC_SYNC_MBYTES must be less than 4096");

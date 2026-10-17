@@ -147,8 +147,13 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
             bits_per_sample = static_cast<bits_per_sample_t>(record_cmd_data.param[1]);
 
             if (record_cmd_data.cmd == record_cmd_type_t::STANDBY_START_CMD) {
+                // prepare file in advance not to block recording start when sound detected
+                if (next.is_equal_status(wav_file_status::status_t::RESET)) {
+                    next.req_prepare(_suffix, sample_freq, bits_per_sample);
+                }
                 _standby_flag = true;
                 while (true) {
+                    wav_file_status::send_core0_grant();  // core0 can access file anytime during standby
                     if (!queue_is_empty(&_spdif_queue)) {
                         sub_frame_buf_info_t buf_info;
                         // check blank status
@@ -177,6 +182,14 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 // check cancel of standby
                 if (record_cmd_data.cmd == record_cmd_type_t::END_CMD || record_cmd_data.cmd == record_cmd_type_t::END_FOR_SPLIT_CMD) {
                     _standby_flag = false;
+                    // dispose the file prepared for standby (removed because of no samples)
+                    // not to reuse it with obsolete sample_freq or bits_per_sample at next start
+                    if (!next.is_equal_status(wav_file_status::status_t::RESET)) {
+                        next.wait_status(wav_file_status::status_t::PREPARED);
+                        next.req_finalize(false);
+                        next.wait_status(wav_file_status::status_t::FINALIZED);
+                        next.reset();
+                    }
                     continue;
                 }
             }

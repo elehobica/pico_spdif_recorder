@@ -17,6 +17,7 @@
 
 #include "config_wifi.h"
 #include "ConfigParam.h"
+#include "version.h"
 #include "ff.h"
 #include "ntp_client.h"
 #include "spdif_rx.h"
@@ -449,7 +450,7 @@ int main()
 
     bits_per_sample = gpio_get(PIN_SWITCH_24BIT) ? bits_per_sample_t::_16BITS : bits_per_sample_t::_24BITS;
     printf("---------------------------\r\n");
-    printf("  pico_spdif_recorder ver. %s\r\n", cfgParam.P_CFG_VERSION.get().c_str());
+    printf("  pico_spdif_recorder ver. %s\r\n", APP_VERSION);
     _show_help(bits_per_sample);
 
     while (true) {

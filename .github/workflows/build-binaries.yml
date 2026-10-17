@@ -35,7 +35,8 @@ jobs:
       - name: Set Version
         uses: ./.github/actions/set-version
         with:
-          target: src/ConfigParam.h
+          target: src/version.h
+          regexp_str: '(APP_VERSION\[\] = )"[0-9]+\.[0-9]+\.[0-9]+"'
           version_str: ${{ steps.generate-version-string.outputs.value }}
           version_str_size: ${{ env.VERSION_LENGTH }}
       - name: Build Pico

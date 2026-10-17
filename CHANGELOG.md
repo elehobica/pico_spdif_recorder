@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 ### Changed
 * Support pico-sdk 2.3.0
+* Support persistence for auto blank split function as `CFG_AUTO_BLANK_SPLIT`
+* Move firmware version from flash parameter to constant `APP_VERSION` in `src/version.h`
 
 ## [1.0.6] - 2026-06-08
 ### Added

@@ -46,7 +46,7 @@ Note:
 ### Button/Switch (Optional)
 | Pico Pin # | GPIO | Function | Connection |
 ----|----|----|----
-| 9 | GP6 | Input | 16bit/24bit switch |
+| 9 | GP6 | Input | 16bit/24bit switch (BIT_RES) |
 | 10 | GP7 | Input | Start/Stop button |
 
 ## How to build with docker image
@@ -112,7 +112,7 @@ $ make -j4
 | Key | Function | Persistence |
 ----|----|----
 | Space | Recording Start Standby / Recording Stop | |
-| r | Resolution change 16bit/24bit (default: 16bit) | |
+| r | Resolution change 16bit/24bit (default: 16bit) | Set by BIT_RES switch at power-on |
 | s | Manual split | |
 | b | Auto blank split on/off (default: on) | Stored to flash (deferred until recording is stopped) |
 | v | Verbose for monitoring messages | |

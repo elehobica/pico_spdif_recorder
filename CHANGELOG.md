@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 * Fix audio gap and pre-roll corruption at recording start by preparing the first WAV file at standby start
 * Fix `%` in log messages on serial output
 * Fix FATFS work area declared as local variable of mount function, which kept being referred to after mount
+* Fix WAV data size not aligned to sample frame when trailing blank is truncated
 
 ## [1.0.7] - 2026-10-17
 ### Changed

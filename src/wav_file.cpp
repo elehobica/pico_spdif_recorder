@@ -347,7 +347,10 @@ bool wav_file::is_data_written() const
 uint64_t wav_file::_get_truncate_bytes() const
 {
     if (_truncate_sec <= 0.0f) return 0;
-    return static_cast<uint64_t>(_truncate_sec * (static_cast<uint32_t>(_bits_per_sample)/8) * NUM_CHANNELS * _sample_freq);
+    const uint32_t block_align = (static_cast<uint32_t>(_bits_per_sample)/8) * NUM_CHANNELS;
+    uint64_t truncate_bytes = static_cast<uint64_t>(_truncate_sec * block_align * _sample_freq);
+    truncate_bytes -= truncate_bytes % block_align;  // align to sample frame not to leave partial frame at the end of data
+    return (truncate_bytes < _total_bytes) ? truncate_bytes : _total_bytes;  // _total_bytes is always aligned
 }
 
 FRESULT wav_file::_stepwise_seek(const FSIZE_t pos)

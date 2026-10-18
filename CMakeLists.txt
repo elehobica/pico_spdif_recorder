@@ -60,6 +60,12 @@ if(DEFINED PERIODIC_SYNC_MBYTES)
     target_compile_definitions(${PROJECT_NAME} PRIVATE PERIODIC_SYNC_MBYTES=${PERIODIC_SYNC_MBYTES}u)
 endif()
 
+# test only: enable test logs and preset wav data size to emulate large file (e.g. -DTEST_PRESET_BYTES=4277687292, 0: no preset)
+if(DEFINED TEST_PRESET_BYTES)
+    message(WARNING "TEST BUILD: TEST_PRESET_BYTES=${TEST_PRESET_BYTES} (not for release)")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE TEST_BUILD TEST_PRESET_BYTES=${TEST_PRESET_BYTES}ull)
+endif()
+
 pico_enable_stdio_usb(${PROJECT_NAME} 1)
 pico_enable_stdio_uart(${PROJECT_NAME} 0)
 

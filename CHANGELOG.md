@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 * Fix audio gap at the beginning of next file after splitting large WAV file (e.g. at 4 GB limit) caused by long FATFS blocking in finalize
 * Fix audio gap and pre-roll corruption at recording start by preparing the first WAV file at standby start
 * Fix `%` in log messages on serial output
+* Fix FATFS work area declared as local variable of mount function, which kept being referred to after mount
 
 ## [1.0.7] - 2026-10-17
 ### Changed

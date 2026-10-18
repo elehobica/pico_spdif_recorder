@@ -167,7 +167,7 @@ static bool _fatfs_init()
     pico_fatfs_set_config(&fatfs_spi_config);
 
     // Mount FATFS
-    FATFS fs;
+    static FATFS fs;  // must be static because FATFS keeps referring to it after mount
     FRESULT fr;
     for (int i = 0; i < 5; i++) {
         fr = f_mount(&fs, "", 1);

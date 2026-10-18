@@ -19,9 +19,6 @@ public:
 
     // === Public class functions ===
     // functions called from core0
-#ifdef TEST_BUILD
-    static void test_paint_stacks();
-#endif
 
     // === Constructor and Destructor ===
     // called from core0
@@ -54,14 +51,6 @@ protected:
     // periodic f_sync interval to write FAT chain of exFAT gradually instead of at once in finalize (0: disabled)
     static_assert(PERIODIC_SYNC_MBYTES < 4096, "PERIODIC_SYNC_MBYTES must be less than 4096");
     static constexpr uint32_t PERIODIC_SYNC_BYTES = PERIODIC_SYNC_MBYTES * 1024u * 1024u;
-#ifdef TEST_BUILD
-#ifndef TEST_PRESET_BYTES
-#define TEST_PRESET_BYTES 0
-#endif
-    // test only: preset wav data size by allocating clusters without writing actual data (0: disabled)
-    static constexpr uint64_t TEST_PRESET_TOTAL_BYTES = TEST_PRESET_BYTES;
-    static constexpr const char* TEST_BLOCKER_FILENAME = "test_blocker.bin";
-#endif
 
     // === Private class functions ===
 
@@ -73,9 +62,6 @@ protected:
     FRESULT _stepwise_seek(const FSIZE_t pos);
     // functions called from core0 and core1
     uint64_t _get_truncate_bytes() const;
-#ifdef TEST_BUILD
-    FRESULT _test_preset(const uint64_t preset_bytes);
-#endif
     // functions called from core1
     uint32_t _write_core(const uint32_t* buff, const uint32_t sub_frame_count);
 
@@ -96,20 +82,5 @@ protected:
     float                   _truncate_sec;
     uint64_t                _next_sync_bytes;
     volatile bool           _sync_pending;
-#ifdef TEST_BUILD
-    static constexpr int    TEST_NUM_SYNC_HIST = 6;
-    uint32_t                _test_sync_count;
-    uint32_t                _test_sync_max_us;
-    uint32_t                _test_sync_hist[TEST_NUM_SYNC_HIST];  // < 5, 5-10, 10-20, 20-50, 50-100, >= 100 ms
-    static constexpr uint32_t TEST_QUEUE_START_US = 1000000;  // period regarded as start of recording
-    static constexpr uint32_t TEST_QUEUE_SYNC_US = 200000;  // period regarded as affected by sync after its completion
-    bool                    _test_queue_started;
-    uint32_t                _test_queue_start_us;
-    float                   _test_queue_ratio_start;
-    float                   _test_queue_ratio_after;
-    float                   _test_queue_ratio_sync;
-    volatile bool           _test_sync_done;
-    volatile uint32_t       _test_sync_done_us;
-#endif
 };
 

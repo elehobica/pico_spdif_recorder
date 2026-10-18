@@ -115,6 +115,7 @@ $ make -j4
 | r | Resolution change 16bit/24bit (default: 16bit) | Set by BIT_RES switch at power-on |
 | s | Manual split | |
 | b | Auto blank split on/off (default: on) | Stored to flash (deferred until recording is stopped) |
+| f | RF64 WAV support on/off (default: off, only while not recording) | Stored to flash |
 | v | Verbose for monitoring messages | |
 | c | Clear WAV file suffix to 1 | |
 | w | Configure Wi-Fi (for Raspberry Pi Pico W only) | Stored to flash when Wi-Fi connection succeeds |
@@ -125,6 +126,17 @@ $ make -j4
 * Auto stop and standby restart when long blank detected
 * Auto split of WAV file when short blank detected
 * Manual immediate split of WAV file without gap
+
+### WAV file size and RF64
+* Standard WAV (RIFF) file is limited to 4 GB because of its 32-bit size fields. (about 2 hours 4 minutes in 24bit 96.0 KHz)
+* RF64 WAV support off (default): WAV file is split immediately without gap before reaching 4 GB.
+* RF64 WAV support on: WAV file is not split by its size, and it is finalized as RF64 ([EBU Tech 3306](https://tech.ebu.ch/publications/tech3306)) only if it exceeds 4 GB.
+  * WAV file of 4 GB or less is standard WAV (RIFF) with 80 bytes header including `JUNK` chunk reserved for `ds64` chunk of RF64.
+    Most of software read it correctly, but software assuming fixed 44 bytes header may fail.
+  * RF64 WAV file can be read by RF64-aware software such as Audacity, ffmpeg, SoX and foobar2000.
+  * RF64 is available only on exFAT card. On FAT32 card, WAV file is split before reaching 4 GB as same as off (warning is shown in help and log)
+    because FAT32 file system limits file size to 4 GB.
+  * [WAV Tagger Tool](#wav-tagger-tool) doesn't support RF64 WAV file.
 
 ### LED indicator
 * Steady ON: Stand-by (ready to start recording).

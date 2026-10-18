@@ -9,7 +9,6 @@
 #include <string>
 #include <cstring>
 #include <cmath>
-#include <cstdlib>
 
 #include "wav_file_status.h"
 
@@ -31,80 +30,30 @@ static inline void _drain_core0_grant()
     wav_file_status::drain_core0_grant();
 }
 
-#ifdef TEST_BUILD
-// test only: measure duration of each FATFS call on core0 to find which call blocks long
-static constexpr uint32_t TEST_LONG_CALL_US = 10000;  // record calls longer than this
-static constexpr int TEST_NUM_LONG_CALLS = 8;
-struct _test_call_record {
-    const char* name;
-    uint32_t    index;
-    uint32_t    t_us;
-};
-static uint32_t _test_call_count = 0;
-static _test_call_record _test_max_call = {};
-static _test_call_record _test_long_calls[TEST_NUM_LONG_CALLS];
-static int _test_num_long_calls = 0;
-struct _test_call_timer {
-    const char* name;
-    uint32_t index = _test_call_count++;
-    uint64_t start_us = _micros();
-    ~_test_call_timer() {
-        _test_call_record rec = {name, index, static_cast<uint32_t>(_micros() - start_us)};
-        if (rec.t_us > _test_max_call.t_us) _test_max_call = rec;
-        if (rec.t_us >= TEST_LONG_CALL_US && _test_num_long_calls < TEST_NUM_LONG_CALLS) _test_long_calls[_test_num_long_calls++] = rec;
-    }
-};
-#define _TEST_MEASURE_CALL() _test_call_timer _test_timer{__func__}
-
-static void _test_reset_calls()
-{
-    _test_call_count = 0;
-    _test_max_call = {"none", 0, 0};
-    _test_num_long_calls = 0;
-}
-
-static void _test_log_calls(const char* op, const char* filename, const uint64_t start_us)
-{
-    spdif_rec_wav::log_printf("[test] %s \"%s\": total %lu ms, %lu FATFS calls, max %lu us (#%lu %s)\r\n",
-        op, filename, static_cast<uint32_t>((_micros() - start_us) / 1000), _test_call_count,
-        _test_max_call.t_us, _test_max_call.index, _test_max_call.name);
-    for (int i = 0; i < _test_num_long_calls; i++) {
-        const _test_call_record& rec = _test_long_calls[i];
-        spdif_rec_wav::log_printf("[test]   long call #%lu %s: %lu us\r\n", rec.index, rec.name, rec.t_us);
-    }
-}
-#else
-#define _TEST_MEASURE_CALL()
-#endif
-
 /*----------------------------------------/
 /  FATFS wrappers for waiting core0 grant
 /----------------------------------------*/
 static inline FRESULT _wrap_f_open(FIL* fp, const TCHAR* path, BYTE mode)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_open(fp, path, mode);
 }
 
 static inline FRESULT _wrap_f_close(FIL* fp)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_close(fp);
 }
 
 static inline FRESULT _wrap_f_read(FIL* fp, void* buff, UINT btr, UINT* br)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_read(fp, buff, btr, br);
 }
 
 static inline FRESULT _wrap_f_write(FIL* fp, const void* buff, UINT btw, UINT* bw)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_write(fp, buff, btw, bw);
 }
 
@@ -117,30 +66,18 @@ static inline FRESULT _wrap_f_write_priority(FIL* fp, const void* buff, UINT btw
 static inline FRESULT _wrap_f_lseek(FIL* fp, FSIZE_t ofs)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_lseek(fp, ofs);
 }
 
 static inline FRESULT _wrap_f_truncate(FIL* fp)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_truncate(fp);
 }
-
-#ifdef TEST_BUILD
-static inline FRESULT _wrap_f_expand(FIL* fp, FSIZE_t fsz, BYTE opt)
-{
-    _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
-    return f_expand(fp, fsz, opt);
-}
-#endif
 
 static inline FRESULT _wrap_f_sync(FIL* fp)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_sync(fp);
 }
 
@@ -153,193 +90,14 @@ static inline FRESULT _wrap_f_sync_priority(FIL* fp)
 static inline FRESULT _wrap_f_unlink(const TCHAR* path)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_unlink(path);
 }
 
 static inline FSIZE_t _wrap_f_tell(FIL* fp)
 {
     _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
     return f_tell(fp);
 }
-
-#ifdef TEST_BUILD
-static inline FRESULT _wrap_f_stat(const TCHAR* path, FILINFO* fno)
-{
-    _blocking_wait_core0_grant();
-    _TEST_MEASURE_CALL();
-    return f_stat(path, fno);
-}
-
-// test only: list of preset files as lines of "<filename> <preset bytes>" to remove them in later tests
-static constexpr const char* TEST_PRESET_LIST_FILENAME = "test_preset_list.txt";
-
-// test only: measure stack high-water mark of core0 (SCRATCH_Y) and core1 (SCRATCH_X) by painting unused area
-// note that core0 stack overflows into the top of core1 stack (SCRATCH_X is followed by SCRATCH_Y)
-extern "C" uint32_t __StackTop;
-extern "C" uint32_t __StackOneTop;
-static constexpr uint32_t TEST_STACK_PAINT = 0xdeadbeef;
-static constexpr uint32_t TEST_SCRATCH_BYTES = 4096;
-
-void wav_file::test_paint_stacks()
-{
-    // called from core0 before launching core1
-    uint32_t* const core1_bottom = &__StackOneTop - TEST_SCRATCH_BYTES / 4;
-    uint32_t* const sp = static_cast<uint32_t*>(__builtin_frame_address(0)) - 64;  // keep margin below current frame
-    for (uint32_t* p = core1_bottom; p < sp; p++) *p = TEST_STACK_PAINT;
-}
-
-static uint32_t _test_stack_used_bytes(uint32_t* const bottom, uint32_t* const top)
-{
-    uint32_t* p = bottom;
-    while (p < top && *p == TEST_STACK_PAINT) p++;
-    return static_cast<uint32_t>(top - p) * 4;
-}
-
-static void _test_log_stacks()
-{
-    // core0: from top of SCRATCH_Y, exceeding 4096 means overflow into core1 stack
-    // core1: lowest written address in SCRATCH_X (includes overflow from core0 if any)
-    const uint32_t core0_bytes = _test_stack_used_bytes(&__StackOneTop, &__StackTop);
-    const uint32_t scratch_x_bytes = _test_stack_used_bytes(&__StackOneTop - TEST_SCRATCH_BYTES / 4, &__StackOneTop);
-    spdif_rec_wav::log_printf("[test] stack high-water: core0 %lu / %lu bytes%s, core1 %lu / %lu bytes\r\n",
-        core0_bytes, TEST_SCRATCH_BYTES, (core0_bytes >= TEST_SCRATCH_BYTES) ? " (OVERFLOW)" : "", scratch_x_bytes, TEST_SCRATCH_BYTES);
-}
-
-// test only: read back the header of finalized wav file and check it against file size and expected values
-// to verify RIFF / RF64 header on the device without copying huge file to PC
-static uint32_t _test_ld32(const uint8_t* p) { return p[0] | (p[1] << 8) | (p[2] << 16) | (static_cast<uint32_t>(p[3]) << 24); }
-static uint64_t _test_ld64(const uint8_t* p) { return _test_ld32(p) | (static_cast<uint64_t>(_test_ld32(p + 4)) << 32); }
-
-// pure check of header contents (no dependency on FATFS to be testable on host PC), return error or nullptr
-static const char* _test_check_header(const uint8_t* h, const uint64_t file_size, const int expected_header_size, const uint64_t expected_data_bytes,
-                                      const uint32_t block_align, const uint32_t expected_channels, bool& rf64, uint64_t& data_bytes)
-{
-    uint64_t riff_bytes = 0;
-    rf64 = memcmp(&h[0], "RF64", 4) == 0;
-    data_bytes = 0;
-    if (!rf64 && memcmp(&h[0], "RIFF", 4) != 0) return "no RIFF/RF64";
-    if (memcmp(&h[8], "WAVE", 4) != 0) return "no WAVE";
-    int pos = 12;
-    if (expected_header_size == wav_header::RF64_RESERVED_HEADER_SIZE) {
-        if (memcmp(&h[pos], rf64 ? "ds64" : "JUNK", 4) != 0 || _test_ld32(&h[pos + 4]) != 28) return "bad JUNK/ds64 chunk";
-        pos += 8 + 28;
-    } else if (rf64) {
-        return "RF64 without reserved header";
-    }
-    if (memcmp(&h[pos], "fmt ", 4) != 0 || _test_ld32(&h[pos + 4]) != 16) return "bad fmt chunk";
-    {
-        const uint32_t audio_format = h[pos + 8] | (h[pos + 9] << 8);
-        const uint32_t num_channels = h[pos + 10] | (h[pos + 11] << 8);
-        const uint32_t sample_rate  = _test_ld32(&h[pos + 12]);
-        const uint32_t byte_rate    = _test_ld32(&h[pos + 16]);
-        const uint32_t align        = h[pos + 20] | (h[pos + 21] << 8);
-        const uint32_t bits         = h[pos + 22] | (h[pos + 23] << 8);
-        if (audio_format != 1 || num_channels != expected_channels || align != block_align ||
-            byte_rate != sample_rate * align || bits != align / num_channels * 8) return "bad fmt contents";
-    }
-    pos += 8 + 16;
-    if (memcmp(&h[pos], "data", 4) != 0) return "no data chunk";
-    const int header_size = pos + 8;
-    if (header_size != expected_header_size) return "unexpected header size";
-
-    if (rf64) {
-        if (_test_ld32(&h[4]) != 0xffffffff || _test_ld32(&h[pos + 4]) != 0xffffffff) return "RF64 size fields not 0xffffffff";
-        riff_bytes = _test_ld64(&h[20]);
-        data_bytes = _test_ld64(&h[28]);
-        if (_test_ld64(&h[36]) != data_bytes / block_align) return "bad sampleCount";
-        if (_test_ld32(&h[44]) != 0) return "bad tableLength";
-        if (riff_bytes <= 0xffffffffULL) return "RF64 though RIFF size fits in 32 bit";
-    } else {
-        riff_bytes = _test_ld32(&h[4]);
-        data_bytes = _test_ld32(&h[pos + 4]);
-        if (wav_header::is_rf64(expected_header_size == wav_header::RF64_RESERVED_HEADER_SIZE, data_bytes)) return "RIFF though RIFF size exceeds 32 bit";
-    }
-    if (riff_bytes + 8 != file_size) return "RIFF size + 8 != file size";
-    if (header_size + data_bytes != file_size) return "header + data size != file size";
-    if (data_bytes != expected_data_bytes) return "data size != recorded bytes";
-    if (data_bytes % block_align != 0) return "data size not aligned to block";
-    return nullptr;
-}
-
-static __attribute__((noinline)) void _test_verify_header(const char* filename, const int expected_header_size, const uint64_t expected_data_bytes, const uint32_t block_align)
-{
-    static FIL fil;
-    static uint8_t h[wav_header::MAX_HEADER_SIZE];
-    UINT br = 0;
-    const char* error = nullptr;
-    FSIZE_t file_size = 0;
-    bool rf64 = false;
-    uint64_t data_bytes = 0;
-
-    if (_wrap_f_open(&fil, filename, FA_READ | FA_OPEN_EXISTING) != FR_OK) {
-        error = "open failed";
-    } else {
-        file_size = f_size(&fil);
-        FRESULT fr = _wrap_f_read(&fil, h, sizeof(h), &br);
-        _wrap_f_close(&fil);
-        if (fr != FR_OK || br < static_cast<UINT>(expected_header_size)) {
-            error = "read failed";
-        } else {
-            error = _test_check_header(h, file_size, expected_header_size, expected_data_bytes, block_align, spdif_rec_wav::NUM_CHANNELS, rf64, data_bytes);
-        }
-    }
-    spdif_rec_wav::log_printf("[test] header check \"%s\": %s%s (%s, header %d, data %llu bytes, file %llu bytes)\r\n",
-        filename, (error == nullptr) ? "OK" : "NG: ", (error == nullptr) ? "" : error, rf64 ? "RF64" : "RIFF", expected_header_size, data_bytes, static_cast<uint64_t>(file_size));
-}
-
-// test only: remove preset files except the last one not to fill the card by repeated tests
-// the last one is kept to check the result of the previous test. return its entry line
-// buffers are static not to consume core0 stack (called only from core0)
-static __attribute__((noinline)) std::string _test_remove_old_presets()
-{
-    static FIL fil;
-    static char buf[256];
-    UINT br = 0;
-    memset(buf, 0, sizeof(buf));
-    if (_wrap_f_open(&fil, TEST_PRESET_LIST_FILENAME, FA_READ | FA_OPEN_EXISTING) != FR_OK) return std::string();
-    _wrap_f_read(&fil, buf, sizeof(buf) - 1, &br);
-    _wrap_f_close(&fil);
-
-    std::string kept;
-    char* line = strtok(buf, "\n");
-    while (line != nullptr) {
-        char* next = strtok(nullptr, "\n");
-        if (next == nullptr) {
-            kept = line;
-            break;
-        }
-        // remove only if it still looks like the preset file (not overwritten by small file after suffix clear)
-        char* sep = strchr(line, ' ');
-        if (sep != nullptr) {
-            *sep = '\0';
-            const uint64_t preset_bytes = strtoull(sep + 1, nullptr, 10);
-            static FILINFO fno;
-            if (_wrap_f_stat(line, &fno) == FR_OK && fno.fsize >= preset_bytes) {
-                FRESULT fr = _wrap_f_unlink(line);
-                spdif_rec_wav::log_printf("[test] remove old preset file \"%s\" (%llu bytes): %s\r\n", line, fno.fsize, (fr == FR_OK) ? "ok" : "failed");
-            }
-        }
-        line = next;
-    }
-    return kept;
-}
-
-// test only: record the new preset file following the kept one
-static __attribute__((noinline)) void _test_add_preset(const std::string& kept, const std::string& filename, const uint64_t preset_bytes)
-{
-    static FIL fil;
-    static char buf[128];
-    UINT bw;
-    int len = 0;
-    if (!kept.empty()) len += snprintf(&buf[len], sizeof(buf) - len, "%s\n", kept.c_str());
-    len += snprintf(&buf[len], sizeof(buf) - len, "%s %llu\n", filename.c_str(), preset_bytes);
-    if (_wrap_f_open(&fil, TEST_PRESET_LIST_FILENAME, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK) return;
-    _wrap_f_write(&fil, buf, len, &bw);
-    _wrap_f_close(&fil);
-}
-#endif
 
 /*-----------------/
 /  Class variables
@@ -370,42 +128,16 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
     _truncate_sec(0.0f),
     _next_sync_bytes(PERIODIC_SYNC_BYTES),
     _sync_pending(false)
-#ifdef TEST_BUILD
-    , _test_sync_count(0),
-    _test_sync_max_us(0),
-    _test_sync_hist(),
-    _test_queue_started(false),
-    _test_queue_start_us(0),
-    _test_queue_ratio_start(0.0f),
-    _test_queue_ratio_after(0.0f),
-    _test_queue_ratio_sync(0.0f),
-    _test_sync_done(false),
-    _test_sync_done_us(0)
-#endif
 {
     char wav_filename[16];
     sprintf(wav_filename, "%s%03d.wav", WAV_PREFIX, suffix);
     _filename = std::string(wav_filename);
 
-#ifdef TEST_BUILD
-    uint64_t test_start_us = _micros();
-    _test_reset_calls();
-    // test only: preset only for the file prepared at standby start because core1 doesn't access file meanwhile
-    const uint64_t test_block_align = (static_cast<uint32_t>(_bits_per_sample)/8) * NUM_CHANNELS;
-    const uint64_t test_preset_bytes = spdif_rec_wav::is_recording() ? 0 : TEST_PRESET_TOTAL_BYTES / test_block_align * test_block_align;
-    std::string test_kept_preset;
-#endif
     _drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
         UINT bw;
         uint8_t buf[wav_header::MAX_HEADER_SIZE];
-
-#ifdef TEST_BUILD
-        if (test_preset_bytes > 0) {
-            test_kept_preset = _test_remove_old_presets();
-        }
-#endif
 
         fr = _wrap_f_open(&_fil, _filename.c_str(), FA_WRITE | FA_CREATE_ALWAYS);
         if (fr != FR_OK) break;
@@ -414,29 +146,10 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
         _rf64_reserved = _rf64_requested && _fil.obj.fs->fs_type == FS_EXFAT;
         _header_size = wav_header::generate(buf, _sample_freq, static_cast<uint16_t>(_bits_per_sample), NUM_CHANNELS, _rf64_reserved, 0);
 
-#ifdef TEST_BUILD
-        // test only: allocate clusters to emulate large file without writing actual data
-        if (test_preset_bytes > 0) {
-            fr = _wrap_f_expand(&_fil, _header_size + test_preset_bytes, 1);
-            if (fr != FR_OK) break;
-        }
-#endif
-
         fr = _wrap_f_write(&_fil, buf, _header_size, &bw);
         if (fr != FR_OK || bw != _header_size) break;
         fr = _wrap_f_sync(&_fil);
         if (fr != FR_OK) break;
-
-#ifdef TEST_BUILD
-        if (test_preset_bytes > 0) {
-            fr = _test_preset(test_preset_bytes);
-            if (fr != FR_OK) break;
-            _test_add_preset(test_kept_preset, _filename, test_preset_bytes);
-        }
-        spdif_rec_wav::log_printf("[test] preset %llu bytes for \"%s\" (rf64 reserved: %d, periodic sync: %lu MB)\r\n", test_preset_bytes, _filename.c_str(), _rf64_reserved, static_cast<uint32_t>(PERIODIC_SYNC_MBYTES));
-        _test_log_calls("prepare", _filename.c_str(), test_start_us);
-        _test_log_stacks();
-#endif
 
         return;
     }
@@ -449,10 +162,6 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
 /-----------------*/
 wav_file::~wav_file()
 {
-#ifdef TEST_BUILD
-    uint64_t test_start_us = _micros();
-    _test_reset_calls();
-#endif
     _drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
@@ -539,14 +248,6 @@ wav_file::~wav_file()
             if (fr != FR_OK) break;
         }
 
-#ifdef TEST_BUILD
-        _test_log_calls("finalize", _filename.c_str(), test_start_us);
-        if (_total_bytes > 0) {
-            _test_verify_header(_filename.c_str(), _header_size, _total_bytes, (static_cast<uint32_t>(_bits_per_sample)/8) * NUM_CHANNELS);
-        }
-        _test_log_stacks();
-#endif
-
         return;
     }
 
@@ -558,26 +259,10 @@ wav_file::~wav_file()
 /--------------------------*/
 void wav_file::sync()
 {
-#ifdef TEST_BUILD
-    _test_reset_calls();
-#endif
     FRESULT fr = _wrap_f_sync(&_fil);
     if (fr != FR_OK) {
         spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_DATA_SYNC_FAIL);
     }
-#ifdef TEST_BUILD
-    {
-        static constexpr uint32_t hist_upper_us[TEST_NUM_SYNC_HIST - 1] = {5000, 10000, 20000, 50000, 100000};
-        const uint32_t t_us = _test_max_call.t_us;
-        int i = 0;
-        while (i < TEST_NUM_SYNC_HIST - 1 && t_us >= hist_upper_us[i]) i++;
-        _test_sync_hist[i]++;
-        _test_sync_count++;
-        if (t_us > _test_sync_max_us) _test_sync_max_us = t_us;
-    }
-    _test_sync_done_us = static_cast<uint32_t>(_micros());
-    _test_sync_done = true;
-#endif
     _sync_pending = false;
 }
 
@@ -626,19 +311,6 @@ void wav_file::set_truncate(const float sec)
 void wav_file::record_queue_ratio(float queue_ratio)
 {
     if (queue_ratio > _worst_queue_ratio) _worst_queue_ratio = queue_ratio;
-#ifdef TEST_BUILD
-    // test only: separate worst queue ratio at start of recording, after that and around periodic sync
-    const uint32_t now_us = static_cast<uint32_t>(_micros());
-    if (!_test_queue_started) {
-        _test_queue_started = true;
-        _test_queue_start_us = now_us;
-    }
-    float& worst = (now_us - _test_queue_start_us < TEST_QUEUE_START_US) ? _test_queue_ratio_start : _test_queue_ratio_after;
-    if (queue_ratio > worst) worst = queue_ratio;
-    if (_sync_pending || (_test_sync_done && now_us - _test_sync_done_us < TEST_QUEUE_SYNC_US)) {
-        if (queue_ratio > _test_queue_ratio_sync) _test_queue_ratio_sync = queue_ratio;
-    }
-#endif
 }
 
 void wav_file::report_start() const
@@ -653,14 +325,6 @@ void wav_file::report_final() const
     uint32_t total_sec_dp = static_cast<uint32_t>((total_sec_f - total_sec) * 1e3);
     const char* rf64_note = wav_header::is_rf64(_rf64_reserved, _total_bytes - _get_truncate_bytes()) ? " (RF64)" : "";
     spdif_rec_wav::log_printf("recorded \"%s\"%s @ %d bits %5.1f KHz (%6.1f Kbps) total %llu bytes (time:  %d:%02d.%03d)\r\n", _filename.c_str(), rf64_note, _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3, _total_bytes + _header_size, total_sec/60, total_sec%60, total_sec_dp);
-#ifdef TEST_BUILD
-    spdif_rec_wav::log_printf("[test] periodic sync of \"%s\": %lu calls, max %lu us\r\n",
-        _filename.c_str(), _test_sync_count, _test_sync_max_us);
-    spdif_rec_wav::log_printf("[test]   sync time hist (ms) <5: %lu, 5-10: %lu, 10-20: %lu, 20-50: %lu, 50-100: %lu, >=100: %lu\r\n",
-        _test_sync_hist[0], _test_sync_hist[1], _test_sync_hist[2], _test_sync_hist[3], _test_sync_hist[4], _test_sync_hist[5]);
-    spdif_rec_wav::log_printf("[test] spdif queue usage of \"%s\": %6.2f %% (first %lu s: %6.2f %%, after: %6.2f %%, around sync: %6.2f %%)\r\n",
-        _filename.c_str(), _worst_queue_ratio * 1e2, TEST_QUEUE_START_US / 1000000, _test_queue_ratio_start * 1e2, _test_queue_ratio_after * 1e2, _test_queue_ratio_sync * 1e2);
-#endif
     if (spdif_rec_wav::get_verbose()) {
         float avg_bw = static_cast<float>(_total_bytes) / _total_time_us * 1e3;
         printf("SD Card writing bandwidth\r\n");
@@ -693,48 +357,6 @@ uint64_t wav_file::_get_truncate_bytes() const
     truncate_bytes -= truncate_bytes % block_align;  // align to sample frame not to leave partial frame at the end of data
     return (truncate_bytes < _total_bytes) ? truncate_bytes : _total_bytes;  // _total_bytes is always aligned
 }
-
-#ifdef TEST_BUILD
-FRESULT wav_file::_test_preset(const uint64_t preset_bytes)
-{
-    // test only: emulate FAT chain of large file actually recorded
-    FRESULT fr;
-    const FSIZE_t data_end = _header_size + preset_bytes;
-    if (_fil.obj.fs->fs_type == FS_EXFAT) {
-        // the area allocated by f_expand is contiguous chain without FAT, which makes seek unrealistically fast
-        // and causes FAT chain of whole area to be written at once by f_sync during recording when fragmented later.
-        // therefore, fragment it here by blocker file allocated right after the area and write FAT chain by f_sync
-        static FIL blocker;  // static not to consume core0 stack
-        UINT bw;
-        // remove existing one in advance because f_open with FA_CREATE_ALWAYS reuses its cluster hole
-        // instead of the cluster right after the preset area suggested by f_expand
-        fr = _wrap_f_unlink(TEST_BLOCKER_FILENAME);
-        if (fr != FR_OK && fr != FR_NO_FILE) return fr;
-        fr = _wrap_f_open(&blocker, TEST_BLOCKER_FILENAME, FA_WRITE | FA_CREATE_NEW);
-        if (fr != FR_OK) return fr;
-        fr = _wrap_f_write(&blocker, "x", 1, &bw);
-        if (fr != FR_OK) return fr;
-        fr = _wrap_f_close(&blocker);
-        if (fr != FR_OK) return fr;
-        // extend by 1 cluster (overwritten by recording data later)
-        const FSIZE_t cluster_bytes = static_cast<FSIZE_t>(_fil.obj.fs->csize) * FF_MAX_SS;
-        fr = _stepwise_seek(data_end + cluster_bytes);
-        if (fr != FR_OK) return fr;
-        if (_fil.obj.stat == 2) {
-            spdif_rec_wav::log_printf("[test] WARNING: preset area of \"%s\" is still contiguous\r\n", _filename.c_str());
-        }
-        fr = _wrap_f_sync(&_fil);
-        if (fr != FR_OK) return fr;
-    }
-    // seek to the end of preset data as if it has been recorded
-    // (backward seek following FAT chain from the head on exFAT, forward on FAT32)
-    fr = _stepwise_seek(data_end);
-    if (fr != FR_OK) return fr;
-    _total_bytes = preset_bytes;
-    _next_sync_bytes = _total_bytes + PERIODIC_SYNC_BYTES;
-    return FR_OK;
-}
-#endif
 
 FRESULT wav_file::_stepwise_seek(const FSIZE_t pos)
 {

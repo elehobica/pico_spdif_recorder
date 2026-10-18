@@ -315,7 +315,7 @@ void wav_file::report_start() const
 
 void wav_file::report_final() const
 {
-    float total_sec_f = static_cast<float>(_total_bytes) / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS / _sample_freq - _truncate_sec;
+    double total_sec_f = static_cast<double>(_total_bytes) / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS / _sample_freq - _truncate_sec;
     uint32_t total_sec = static_cast<uint32_t>(total_sec_f);
     uint32_t total_sec_dp = static_cast<uint32_t>((total_sec_f - total_sec) * 1e3);
     spdif_rec_wav::log_printf("recorded \"%s\" @ %d bits %5.1f KHz (%6.1f Kbps) total %llu bytes (time:  %d:%02d.%03d)\r\n", _filename.c_str(), _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3, _total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);

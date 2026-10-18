@@ -175,13 +175,47 @@ static inline FRESULT _wrap_f_stat(const TCHAR* path, FILINFO* fno)
 // test only: list of preset files as lines of "<filename> <preset bytes>" to remove them in later tests
 static constexpr const char* TEST_PRESET_LIST_FILENAME = "test_preset_list.txt";
 
+// test only: measure stack high-water mark of core0 (SCRATCH_Y) and core1 (SCRATCH_X) by painting unused area
+// note that core0 stack overflows into the top of core1 stack (SCRATCH_X is followed by SCRATCH_Y)
+extern "C" uint32_t __StackTop;
+extern "C" uint32_t __StackOneTop;
+static constexpr uint32_t TEST_STACK_PAINT = 0xdeadbeef;
+static constexpr uint32_t TEST_SCRATCH_BYTES = 4096;
+
+void wav_file::test_paint_stacks()
+{
+    // called from core0 before launching core1
+    uint32_t* const core1_bottom = &__StackOneTop - TEST_SCRATCH_BYTES / 4;
+    uint32_t* const sp = static_cast<uint32_t*>(__builtin_frame_address(0)) - 64;  // keep margin below current frame
+    for (uint32_t* p = core1_bottom; p < sp; p++) *p = TEST_STACK_PAINT;
+}
+
+static uint32_t _test_stack_used_bytes(uint32_t* const bottom, uint32_t* const top)
+{
+    uint32_t* p = bottom;
+    while (p < top && *p == TEST_STACK_PAINT) p++;
+    return static_cast<uint32_t>(top - p) * 4;
+}
+
+static void _test_log_stacks()
+{
+    // core0: from top of SCRATCH_Y, exceeding 4096 means overflow into core1 stack
+    // core1: lowest written address in SCRATCH_X (includes overflow from core0 if any)
+    const uint32_t core0_bytes = _test_stack_used_bytes(&__StackOneTop, &__StackTop);
+    const uint32_t scratch_x_bytes = _test_stack_used_bytes(&__StackOneTop - TEST_SCRATCH_BYTES / 4, &__StackOneTop);
+    spdif_rec_wav::log_printf("[test] stack high-water: core0 %lu / %lu bytes%s, core1 %lu / %lu bytes\r\n",
+        core0_bytes, TEST_SCRATCH_BYTES, (core0_bytes >= TEST_SCRATCH_BYTES) ? " (OVERFLOW)" : "", scratch_x_bytes, TEST_SCRATCH_BYTES);
+}
+
 // test only: remove preset files except the last one not to fill the card by repeated tests
 // the last one is kept to check the result of the previous test. return its entry line
-static std::string _test_remove_old_presets()
+// buffers are static not to consume core0 stack (called only from core0)
+static __attribute__((noinline)) std::string _test_remove_old_presets()
 {
-    FIL fil;
+    static FIL fil;
+    static char buf[256];
     UINT br = 0;
-    char buf[256] = {};
+    memset(buf, 0, sizeof(buf));
     if (_wrap_f_open(&fil, TEST_PRESET_LIST_FILENAME, FA_READ | FA_OPEN_EXISTING) != FR_OK) return std::string();
     _wrap_f_read(&fil, buf, sizeof(buf) - 1, &br);
     _wrap_f_close(&fil);
@@ -199,7 +233,7 @@ static std::string _test_remove_old_presets()
         if (sep != nullptr) {
             *sep = '\0';
             const uint64_t preset_bytes = strtoull(sep + 1, nullptr, 10);
-            FILINFO fno;
+            static FILINFO fno;
             if (_wrap_f_stat(line, &fno) == FR_OK && fno.fsize >= preset_bytes) {
                 FRESULT fr = _wrap_f_unlink(line);
                 spdif_rec_wav::log_printf("[test] remove old preset file \"%s\" (%llu bytes): %s\r\n", line, fno.fsize, (fr == FR_OK) ? "ok" : "failed");
@@ -211,11 +245,11 @@ static std::string _test_remove_old_presets()
 }
 
 // test only: record the new preset file following the kept one
-static void _test_add_preset(const std::string& kept, const std::string& filename, const uint64_t preset_bytes)
+static __attribute__((noinline)) void _test_add_preset(const std::string& kept, const std::string& filename, const uint64_t preset_bytes)
 {
-    FIL fil;
+    static FIL fil;
+    static char buf[128];
     UINT bw;
-    char buf[128];
     int len = 0;
     if (!kept.empty()) len += snprintf(&buf[len], sizeof(buf) - len, "%s\n", kept.c_str());
     len += snprintf(&buf[len], sizeof(buf) - len, "%s %llu\n", filename.c_str(), preset_bytes);
@@ -319,6 +353,7 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
         }
         spdif_rec_wav::log_printf("[test] preset %llu bytes for \"%s\" (rf64 reserved: %d, periodic sync: %lu MB)\r\n", test_preset_bytes, _filename.c_str(), _rf64_reserved, static_cast<uint32_t>(PERIODIC_SYNC_MBYTES));
         _test_log_calls("prepare", _filename.c_str(), test_start_us);
+        _test_log_stacks();
 #endif
 
         return;
@@ -419,6 +454,7 @@ wav_file::~wav_file()
 
 #ifdef TEST_BUILD
         _test_log_calls("finalize", _filename.c_str(), test_start_us);
+        _test_log_stacks();
 #endif
 
         return;
@@ -578,7 +614,7 @@ FRESULT wav_file::_test_preset(const uint64_t preset_bytes)
         // the area allocated by f_expand is contiguous chain without FAT, which makes seek unrealistically fast
         // and causes FAT chain of whole area to be written at once by f_sync during recording when fragmented later.
         // therefore, fragment it here by blocker file allocated right after the area and write FAT chain by f_sync
-        FIL blocker;
+        static FIL blocker;  // static not to consume core0 stack
         UINT bw;
         fr = _wrap_f_open(&blocker, TEST_BLOCKER_FILENAME, FA_WRITE | FA_CREATE_ALWAYS);
         if (fr != FR_OK) return fr;

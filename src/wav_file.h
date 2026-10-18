@@ -19,6 +19,9 @@ public:
 
     // === Public class functions ===
     // functions called from core0
+#ifdef TEST_BUILD
+    static void test_paint_stacks();
+#endif
 
     // === Constructor and Destructor ===
     // called from core0

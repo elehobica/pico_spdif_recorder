@@ -23,6 +23,9 @@
 #include "spdif_rx.h"
 #include "spdif_rec_wav.h"
 #include "tf_card.h"
+#ifdef TEST_BUILD
+#include "wav_file.h"
+#endif
 
 bool picoW = false;
 static constexpr uint PIN_LED = 25;  // PICO_DEFAULT_LED_PIN of Pico
@@ -473,6 +476,9 @@ int main()
     spdif_rec_wav::set_wait_grant_func(_led_blink_during_wait);
     // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
+#ifdef TEST_BUILD
+    wav_file::test_paint_stacks();
+#endif
     multicore_launch_core1(_core1_process);
 
     sleep_ms(500);  // wait for FATFS to be mounted

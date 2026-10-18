@@ -53,6 +53,7 @@ static uint32_t signal_history_filtered_pos[NUM_SIGNALS] = {0UL, 0UL};
 static uint32_t signal_history_filtered_neg[NUM_SIGNALS] = {~0UL, ~0UL};
 
 static bool core1_running = false;
+static BYTE fs_type = 0;
 volatile static bool stable_flg = false;
 volatile static bool lost_stable_flg = false;
 enum class signal_event_t {
@@ -185,6 +186,7 @@ static bool _fatfs_init()
                          (fs.fs_type == FS_FAT32) ? "FAT32" :
                          (fs.fs_type == FS_EXFAT) ? "exFAT" : "unknown format";
     printf("Card info: %s %7.2f GB (GB = 1E9 Bytes)\n\n", format, fs.csize * fs.n_fatent * 512E-9);
+    fs_type = fs.fs_type;
 
     return true;
 }
@@ -198,11 +200,19 @@ static void _core1_process()
     core1_running = false;
 }
 
+static void _warn_rf64_wav_unavailable()
+{
+    if (spdif_rec_wav::get_support_rf64_wav() && fs_type != FS_EXFAT) {
+        printf("WARNING: RF64 WAV is not available on FAT32, WAV will be split at 4 GB\r\n");
+    }
+}
+
 static void _show_help(const bits_per_sample_t bits_per_sample)
 {
     printf("---------------------------\r\n");
     printf(" bit resolution:   %d bits\r\n", static_cast<int>(bits_per_sample));
     printf(" auto blank split: %s\r\n", spdif_rec_wav::get_auto_blank_split() ? "on" : "off");
+    printf(" rf64 wav:         %s\r\n", spdif_rec_wav::get_support_rf64_wav() ? "on" : "off");
     printf(" verbose:          %s\r\n", spdif_rec_wav::get_verbose() ? "on" : "off");
     printf(" suffix to rec:    %03d\r\n", spdif_rec_wav::get_suffix());
     printf("---------------------------\r\n");
@@ -211,6 +221,7 @@ static void _show_help(const bits_per_sample_t bits_per_sample)
     printf(" 'r' to switch 16/24 bits\r\n");
     printf(" 's' to manual split (*1)\r\n");
     printf(" 'b' to toggle auto blank split (*3)\r\n");
+    printf(" 'f' to toggle rf64 wav (*2)\r\n");
     printf(" 'v' to toggle verbose\r\n");
     printf(" 'c' to clear suffix (*2)\r\n");
     if (picoW) {
@@ -221,6 +232,7 @@ static void _show_help(const bits_per_sample_t bits_per_sample)
     printf("  (*2) only while not recording\r\n");
     printf("  (*3) persistence pending while recording\r\n");
     printf("---------------------------\r\n");
+    _warn_rf64_wav_unavailable();
 }
 
 static void _led_blink_during_wait()
@@ -457,6 +469,7 @@ int main()
     }
 
     spdif_rec_wav::set_auto_blank_split(cfgParam.P_CFG_AUTO_BLANK_SPLIT.get());
+    spdif_rec_wav::set_support_rf64_wav(cfgParam.P_CFG_SUPPORT_RF64_WAV.get());
     spdif_rec_wav::set_wait_grant_func(_led_blink_during_wait);
     // spdif_rec_wav process runs on Core1
     multicore_reset_core1();
@@ -558,6 +571,18 @@ int main()
                 spdif_rec_wav::set_auto_blank_split(auto_blank_split);
                 printf("auto blank split: %s\r\n", auto_blank_split ? "on" : "off");
                 auto_blank_split_store_pending = true;
+            } else if (c == 'f') {
+                if (!spdif_rec_wav::is_standby() && !spdif_rec_wav::is_recording()) {
+                    bool support_rf64_wav = !spdif_rec_wav::get_support_rf64_wav();
+                    spdif_rec_wav::set_support_rf64_wav(support_rf64_wav);
+                    printf("rf64 wav: %s\r\n", support_rf64_wav ? "on" : "off");
+                    _warn_rf64_wav_unavailable();
+                    cfgParam.P_CFG_SUPPORT_RF64_WAV.set(support_rf64_wav);
+                    if (!_store_config_param()) {
+                        printf("ERROR: failed to store rf64 wav configuration to flash\r\n");
+                        _led_disp_error(main_error_t::FLASH_PROGRAM_ERROR);
+                    }
+                }
             } else if (c == 'v') {
                 bool verbose = !spdif_rec_wav::get_verbose();
                 spdif_rec_wav::set_verbose(verbose);

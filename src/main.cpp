@@ -128,6 +128,8 @@ static void _spdif_rx_init()
         .flags = SPDIF_RX_FLAGS_ALL
     };
 
+    // sampling frequencies above 96 KHz are not supported for recording: ignore them (treated as no signal)
+    spdif_rx_set_max_samp_freq(SAMP_FREQ_96000);
     spdif_rx_start(&spdif_rx_config);
     spdif_rx_set_callback_on_stable(_on_stable_func);
     spdif_rx_set_callback_on_lost_stable(_on_lost_stable_func);

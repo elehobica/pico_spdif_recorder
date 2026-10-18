@@ -616,7 +616,11 @@ FRESULT wav_file::_test_preset(const uint64_t preset_bytes)
         // therefore, fragment it here by blocker file allocated right after the area and write FAT chain by f_sync
         static FIL blocker;  // static not to consume core0 stack
         UINT bw;
-        fr = _wrap_f_open(&blocker, TEST_BLOCKER_FILENAME, FA_WRITE | FA_CREATE_ALWAYS);
+        // remove existing one in advance because f_open with FA_CREATE_ALWAYS reuses its cluster hole
+        // instead of the cluster right after the preset area suggested by f_expand
+        fr = _wrap_f_unlink(TEST_BLOCKER_FILENAME);
+        if (fr != FR_OK && fr != FR_NO_FILE) return fr;
+        fr = _wrap_f_open(&blocker, TEST_BLOCKER_FILENAME, FA_WRITE | FA_CREATE_NEW);
         if (fr != FR_OK) return fr;
         fr = _wrap_f_write(&blocker, "x", 1, &bw);
         if (fr != FR_OK) return fr;

@@ -215,7 +215,7 @@ static void _show_help(const bits_per_sample_t bits_per_sample)
     printf("---------------------------\r\n");
     printf(" bit resolution:   %d bits\r\n", static_cast<int>(bits_per_sample));
     printf(" auto blank split: %s\r\n", spdif_rec_wav::get_auto_blank_split() ? "on" : "off");
-    printf(" rf64 wav:         %s\r\n", spdif_rec_wav::get_support_rf64_wav() ? "on" : "off");
+    printf(" RF64 WAV:         %s\r\n", spdif_rec_wav::get_support_rf64_wav() ? "on" : "off");
     printf(" verbose:          %s\r\n", spdif_rec_wav::get_verbose() ? "on" : "off");
     printf(" suffix to rec:    %03d\r\n", spdif_rec_wav::get_suffix());
     printf("---------------------------\r\n");
@@ -224,7 +224,7 @@ static void _show_help(const bits_per_sample_t bits_per_sample)
     printf(" 'r' to switch 16/24 bits\r\n");
     printf(" 's' to manual split (*1)\r\n");
     printf(" 'b' to toggle auto blank split (*3)\r\n");
-    printf(" 'f' to toggle rf64 wav (*2)\r\n");
+    printf(" 'f' to toggle RF64 WAV (*2)\r\n");
     printf(" 'v' to toggle verbose\r\n");
     printf(" 'c' to clear suffix (*2)\r\n");
     if (picoW) {
@@ -581,11 +581,11 @@ int main()
                 if (!spdif_rec_wav::is_standby() && !spdif_rec_wav::is_recording()) {
                     bool support_rf64_wav = !spdif_rec_wav::get_support_rf64_wav();
                     spdif_rec_wav::set_support_rf64_wav(support_rf64_wav);
-                    printf("rf64 wav: %s\r\n", support_rf64_wav ? "on" : "off");
+                    printf("RF64 WAV: %s\r\n", support_rf64_wav ? "on" : "off");
                     _warn_rf64_wav_unavailable();
                     cfgParam.P_CFG_SUPPORT_RF64_WAV.set(support_rf64_wav);
                     if (!_store_config_param()) {
-                        printf("ERROR: failed to store rf64 wav configuration to flash\r\n");
+                        printf("ERROR: failed to store RF64 WAV configuration to flash\r\n");
                         _led_disp_error(main_error_t::FLASH_PROGRAM_ERROR);
                     }
                 }

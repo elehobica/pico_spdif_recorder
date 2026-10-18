@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 * Add RF64 WAV support for WAV file over 4 GB on exFAT card as `CFG_SUPPORT_RF64_WAV` (default: off, toggled by `f` command)
   * WAV file of 4 GB or less is kept as standard WAV (RIFF) with `JUNK` chunk, and converted to RF64 at finalize only if it exceeds 4 GB
   * WAV file is split before reaching 4 GB as before when RF64 WAV support is off or the card is FAT32
+* Add RF64 WAV and `JUNK` chunk support to wav_tagger (`wav_io.py`), and copy audio data in blocks to handle huge WAV files
 ### Fixed
 * Fix audio gap at the beginning of next file after splitting large WAV file (e.g. at 4 GB limit) caused by long FATFS blocking in finalize
 * Fix audio gap and pre-roll corruption at recording start by preparing the first WAV file at standby start

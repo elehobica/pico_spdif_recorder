@@ -9,6 +9,7 @@ A Python tool for processing WAV files recorded by [pico_spdif_recorder](../READ
 - **Smart Merge/Split**: Merges short files or splits long files to match expected track durations
 - **ID3v2.3 Tags**: Adds proper ID3v2.3 metadata tags (not RIFF tags) with UTF-8 encoding
 - **Multi-language Support**: Full UTF-8 support for Japanese, Korean, and other languages in metadata
+- **RF64 Support**: Reads standard WAV (RIFF, including 80 bytes header with `JUNK` chunk) and RF64 WAV over 4 GB recorded by pico_spdif_recorder
 
 ## Installation
 
@@ -260,6 +261,9 @@ Each output WAV file contains:
 
 ### WAV File Compatibility
 
+- **Input Formats**: Standard WAV (RIFF) with any additional chunks such as `JUNK` and `LIST`, and RF64 WAV (EBU Tech 3306) with `ds64` chunk
+- **Output Formats**: Standard WAV (RIFF) with 44 bytes header, or RF64 WAV if the merged/split audio data exceeds 4 GB
+- **Large Files**: Audio data is copied in blocks without loading whole file on memory (implemented in `wav_io.py`, which must be placed in the same directory)
 - **Merging**: Requires matching parameters (sample rate, bit depth, channels)
 - **Splitting**: Done at frame boundaries to maintain audio integrity
 - **ID3 Tags**: Prepended to WAV file (standard practice for ID3 in WAV)

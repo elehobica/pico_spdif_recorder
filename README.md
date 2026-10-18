@@ -136,7 +136,7 @@ $ make -j4
   * RF64 WAV file can be read by RF64-aware software such as Audacity, ffmpeg, SoX and foobar2000.
   * RF64 is available only on exFAT card. On FAT32 card, WAV file is split before reaching 4 GB as same as off (warning is shown in help and log)
     because FAT32 file system limits file size to 4 GB.
-  * [WAV Tagger Tool](#wav-tagger-tool) doesn't support RF64 WAV file.
+  * [WAV Tagger Tool](#wav-tagger-tool) supports both of them.
 
 ### LED indicator
 * Steady ON: Stand-by (ready to start recording).

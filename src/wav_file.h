@@ -58,7 +58,7 @@ protected:
 
     // === Private member functions ===
     // functions called from core0
-    FRESULT _stepwise_seek(const DWORD pos);
+    FRESULT _stepwise_seek(const FSIZE_t pos);
     // functions called from core1
     uint32_t _write_core(const uint32_t* buff, const uint32_t sub_frame_count);
 
@@ -67,8 +67,8 @@ protected:
     std::string             _filename;
     const uint32_t          _sample_freq;
     const bits_per_sample_t _bits_per_sample;
-    uint32_t                _total_bytes;
-    uint32_t                _total_time_us;
+    uint64_t                _total_bytes;
+    uint64_t                _total_time_us;
     float                   _best_bandwidth;
     float                   _worst_bandwidth;
     float                   _worst_queue_ratio;

@@ -293,6 +293,9 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
 
             if (record_cmd_data.cmd == record_cmd_type_t::END_CMD) {
                 _recording_flag = false;
+                // note: finalize with truncate of large file (e.g. RF64 over 4 GB) could take long (about 0.84 sec for 20 GB),
+                // and samples are not captured until standby restarts after it. therefore, if sound restarts
+                // just after blank skip, the beginning of the next file could be lost (see wav_file destructor)
                 prev.wait_status(wav_file_status::status_t::FINALIZED);
                 if (next.is_equal_status(wav_file_status::status_t::PREPARED)) {
                     next.req_finalize(false);

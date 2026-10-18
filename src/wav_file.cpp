@@ -207,6 +207,88 @@ static void _test_log_stacks()
         core0_bytes, TEST_SCRATCH_BYTES, (core0_bytes >= TEST_SCRATCH_BYTES) ? " (OVERFLOW)" : "", scratch_x_bytes, TEST_SCRATCH_BYTES);
 }
 
+// test only: read back the header of finalized wav file and check it against file size and expected values
+// to verify RIFF / RF64 header on the device without copying huge file to PC
+static uint32_t _test_ld32(const uint8_t* p) { return p[0] | (p[1] << 8) | (p[2] << 16) | (static_cast<uint32_t>(p[3]) << 24); }
+static uint64_t _test_ld64(const uint8_t* p) { return _test_ld32(p) | (static_cast<uint64_t>(_test_ld32(p + 4)) << 32); }
+
+// pure check of header contents (no dependency on FATFS to be testable on host PC), return error or nullptr
+static const char* _test_check_header(const uint8_t* h, const uint64_t file_size, const int expected_header_size, const uint64_t expected_data_bytes,
+                                      const uint32_t block_align, const uint32_t expected_channels, bool& rf64, uint64_t& data_bytes)
+{
+    uint64_t riff_bytes = 0;
+    rf64 = memcmp(&h[0], "RF64", 4) == 0;
+    data_bytes = 0;
+    if (!rf64 && memcmp(&h[0], "RIFF", 4) != 0) return "no RIFF/RF64";
+    if (memcmp(&h[8], "WAVE", 4) != 0) return "no WAVE";
+    int pos = 12;
+    if (expected_header_size == wav_header::RF64_RESERVED_HEADER_SIZE) {
+        if (memcmp(&h[pos], rf64 ? "ds64" : "JUNK", 4) != 0 || _test_ld32(&h[pos + 4]) != 28) return "bad JUNK/ds64 chunk";
+        pos += 8 + 28;
+    } else if (rf64) {
+        return "RF64 without reserved header";
+    }
+    if (memcmp(&h[pos], "fmt ", 4) != 0 || _test_ld32(&h[pos + 4]) != 16) return "bad fmt chunk";
+    {
+        const uint32_t audio_format = h[pos + 8] | (h[pos + 9] << 8);
+        const uint32_t num_channels = h[pos + 10] | (h[pos + 11] << 8);
+        const uint32_t sample_rate  = _test_ld32(&h[pos + 12]);
+        const uint32_t byte_rate    = _test_ld32(&h[pos + 16]);
+        const uint32_t align        = h[pos + 20] | (h[pos + 21] << 8);
+        const uint32_t bits         = h[pos + 22] | (h[pos + 23] << 8);
+        if (audio_format != 1 || num_channels != expected_channels || align != block_align ||
+            byte_rate != sample_rate * align || bits != align / num_channels * 8) return "bad fmt contents";
+    }
+    pos += 8 + 16;
+    if (memcmp(&h[pos], "data", 4) != 0) return "no data chunk";
+    const int header_size = pos + 8;
+    if (header_size != expected_header_size) return "unexpected header size";
+
+    if (rf64) {
+        if (_test_ld32(&h[4]) != 0xffffffff || _test_ld32(&h[pos + 4]) != 0xffffffff) return "RF64 size fields not 0xffffffff";
+        riff_bytes = _test_ld64(&h[20]);
+        data_bytes = _test_ld64(&h[28]);
+        if (_test_ld64(&h[36]) != data_bytes / block_align) return "bad sampleCount";
+        if (_test_ld32(&h[44]) != 0) return "bad tableLength";
+        if (riff_bytes <= 0xffffffffULL) return "RF64 though RIFF size fits in 32 bit";
+    } else {
+        riff_bytes = _test_ld32(&h[4]);
+        data_bytes = _test_ld32(&h[pos + 4]);
+        if (wav_header::is_rf64(expected_header_size == wav_header::RF64_RESERVED_HEADER_SIZE, data_bytes)) return "RIFF though RIFF size exceeds 32 bit";
+    }
+    if (riff_bytes + 8 != file_size) return "RIFF size + 8 != file size";
+    if (header_size + data_bytes != file_size) return "header + data size != file size";
+    if (data_bytes != expected_data_bytes) return "data size != recorded bytes";
+    if (data_bytes % block_align != 0) return "data size not aligned to block";
+    return nullptr;
+}
+
+static __attribute__((noinline)) void _test_verify_header(const char* filename, const int expected_header_size, const uint64_t expected_data_bytes, const uint32_t block_align)
+{
+    static FIL fil;
+    static uint8_t h[wav_header::MAX_HEADER_SIZE];
+    UINT br = 0;
+    const char* error = nullptr;
+    FSIZE_t file_size = 0;
+    bool rf64 = false;
+    uint64_t data_bytes = 0;
+
+    if (_wrap_f_open(&fil, filename, FA_READ | FA_OPEN_EXISTING) != FR_OK) {
+        error = "open failed";
+    } else {
+        file_size = f_size(&fil);
+        FRESULT fr = _wrap_f_read(&fil, h, sizeof(h), &br);
+        _wrap_f_close(&fil);
+        if (fr != FR_OK || br < static_cast<UINT>(expected_header_size)) {
+            error = "read failed";
+        } else {
+            error = _test_check_header(h, file_size, expected_header_size, expected_data_bytes, block_align, spdif_rec_wav::NUM_CHANNELS, rf64, data_bytes);
+        }
+    }
+    spdif_rec_wav::log_printf("[test] header check \"%s\": %s%s (%s, header %d, data %llu bytes, file %llu bytes)\r\n",
+        filename, (error == nullptr) ? "OK" : "NG: ", (error == nullptr) ? "" : error, rf64 ? "RF64" : "RIFF", expected_header_size, data_bytes, static_cast<uint64_t>(file_size));
+}
+
 // test only: remove preset files except the last one not to fill the card by repeated tests
 // the last one is kept to check the result of the previous test. return its entry line
 // buffers are static not to consume core0 stack (called only from core0)
@@ -386,6 +468,11 @@ wav_file::~wav_file()
             UINT bw;
             uint8_t buf[wav_header::MAX_HEADER_SIZE];
 
+            // note: truncate (trailing blank at blank skip or stop) takes time proportional to the file size
+            // because FATFS follows the whole cluster chain from the head twice, by backward seek and by f_truncate
+            // to check contiguity on exFAT (measured: about 0.84 sec in total for 20 GB file).
+            // recording doesn't break meanwhile because core1 waits for this finalize without recording,
+            // but restart of recording when sound is detected is delayed until it completes (see spdif_rec_wav)
             if (_truncate_sec > 0.0f) {
                 uint64_t truncate_bytes = _get_truncate_bytes();
                 FSIZE_t cur_pos = _wrap_f_tell(&_fil) - truncate_bytes;
@@ -454,6 +541,9 @@ wav_file::~wav_file()
 
 #ifdef TEST_BUILD
         _test_log_calls("finalize", _filename.c_str(), test_start_us);
+        if (_total_bytes > 0) {
+            _test_verify_header(_filename.c_str(), _header_size, _total_bytes, (static_cast<uint32_t>(_bits_per_sample)/8) * NUM_CHANNELS);
+        }
         _test_log_stacks();
 #endif
 

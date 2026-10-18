@@ -404,12 +404,20 @@ void spdif_rec_wav::report_error(const error_type_t type, const uint32_t param)
 
 void spdif_rec_wav::log_printf(const char* fmt, ...)
 {
-    char buff[512];
+    // work area is static for each core not to consume stack (log file access is deep in FATFS calls)
+    // log_printf can be called from both cores at the same time, but never from IRQ (see _push_sub_frame_buf)
+    static constexpr int LOG_PRINTF_BUFF_SIZE = 512;
+    static struct {
+        char buff[LOG_PRINTF_BUFF_SIZE];
+        FIL  fil;
+    } work[NUM_CORES];
+    char* const buff = work[get_core_num()].buff;
+    FIL* const fil = &work[get_core_num()].fil;
     va_list va;
 
     // variable arg processing
     va_start(va, fmt);
-    vsprintf(buff, fmt, va);
+    vsnprintf(buff, LOG_PRINTF_BUFF_SIZE, fmt, va);
     va_end(va);
 
     // print on serial
@@ -417,7 +425,6 @@ void spdif_rec_wav::log_printf(const char* fmt, ...)
 
     // print on log file
     for ( ; ; ) {
-        FIL fil;
         FRESULT fr;
         UINT bw;
 
@@ -426,15 +433,15 @@ void spdif_rec_wav::log_printf(const char* fmt, ...)
         //  FA_OPEN_ALWAYS: Opens the file if it is existing. If not, a new file will be created.
         //  FA_OPEN_APPEND: Same as FA_OPEN_ALWAYS except the read/write pointer is set end of the file.
         if (_clear_log) {
-            fr = f_open(&fil, _log_filename, FA_WRITE | FA_CREATE_ALWAYS);
+            fr = f_open(fil, _log_filename, FA_WRITE | FA_CREATE_ALWAYS);
             if (fr != FR_OK) break;
         } else {
-            fr = f_open(&fil, _log_filename, FA_WRITE | FA_OPEN_APPEND);
+            fr = f_open(fil, _log_filename, FA_WRITE | FA_OPEN_APPEND);
             if (fr != FR_OK) break;
         }
-        fr = f_write(&fil, buff, strnlen(buff, sizeof(buff)), &bw);
-        if (fr != FR_OK || bw != strnlen(buff, sizeof(buff))) break;
-        fr = f_close(&fil);
+        fr = f_write(fil, buff, strnlen(buff, LOG_PRINTF_BUFF_SIZE), &bw);
+        if (fr != FR_OK || bw != strnlen(buff, LOG_PRINTF_BUFF_SIZE)) break;
+        fr = f_close(fil);
         if (fr != FR_OK) break;
 
         return;
@@ -476,7 +483,7 @@ void spdif_rec_wav::_push_sub_frame_buf(const uint32_t* buff, const uint32_t sub
 
 int spdif_rec_wav::_get_last_suffix()
 {
-    FIL fil;
+    static FIL fil;  // static not to consume stack (called only from core1)
     FRESULT fr;
     char buff[16];
     UINT br;
@@ -498,7 +505,7 @@ int spdif_rec_wav::_get_last_suffix()
 
 void spdif_rec_wav::_set_last_suffix(int suffix)
 {
-    FIL fil;
+    static FIL fil;  // static not to consume stack (called only from core1)
     FRESULT fr;
     char buff[16];
     UINT bw;

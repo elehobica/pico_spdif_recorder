@@ -10,6 +10,7 @@
 
 #include "ff.h"
 #include "spdif_rec_wav.h"
+#include "wav_header.h"
 
 class wav_file
 {
@@ -41,7 +42,7 @@ protected:
     static constexpr int NUM_CHANNELS = spdif_rec_wav::NUM_CHANNELS;
     static constexpr int NUM_SUB_FRAME_BUF = spdif_rec_wav::NUM_SUB_FRAME_BUF;
     static constexpr const char* WAV_PREFIX = "record_";
-    static constexpr int WAV_HEADER_SIZE = 44;
+    static constexpr int WAV_HEADER_SIZE = wav_header::WAV_HEADER_SIZE;
     static constexpr uint32_t MAX_TOTAL_BYTES = 0xfff00000;  // max total bytes of wav data to avoid 32bit overflow
     static constexpr int64_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB
 #ifndef PERIODIC_SYNC_MBYTES
@@ -59,6 +60,8 @@ protected:
     // === Private member functions ===
     // functions called from core0
     FRESULT _stepwise_seek(const FSIZE_t pos);
+    // functions called from core0 and core1
+    uint64_t _get_truncate_bytes() const;
     // functions called from core1
     uint32_t _write_core(const uint32_t* buff, const uint32_t sub_frame_count);
 
@@ -67,6 +70,9 @@ protected:
     std::string             _filename;
     const uint32_t          _sample_freq;
     const bits_per_sample_t _bits_per_sample;
+    bool                    _rf64_requested;  // CFG_SUPPORT_RF64_WAV at file creation
+    bool                    _rf64_reserved;   // header reserved for RF64 (only when requested and exFAT)
+    int                     _header_size;
     uint64_t                _total_bytes;
     uint64_t                _total_time_us;
     float                   _best_bandwidth;

@@ -632,6 +632,7 @@ int main()
 
         // background file process on core0
         spdif_rec_wav::process_wav_file_cmd();
+        spdif_rec_wav::process_log_file();
 
         tight_loop_contents();
         sleep_ms(10);

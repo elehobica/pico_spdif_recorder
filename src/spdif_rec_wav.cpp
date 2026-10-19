@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cstdarg>
 
+#include "ff.h"
 #include "wav_file_status.h"
 #include "wav_file_cmd.h"
 
@@ -33,8 +34,11 @@ static inline uint64_t _micros()
 /-----------------*/
 const char*    spdif_rec_wav::_suffix_info_filename;
 int            spdif_rec_wav::_suffix;
-char           spdif_rec_wav::_log_filename[16];
+char           spdif_rec_wav::_log_filename[spdif_rec_wav::LOG_FILENAME_SIZE];
 bool           spdif_rec_wav::_clear_log;
+volatile bool  spdif_rec_wav::_log_ready = false;
+volatile int   spdif_rec_wav::_suffix_to_store = 0;
+int            spdif_rec_wav::_stored_suffix = 0;
 uint32_t       spdif_rec_wav::_sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
 int            spdif_rec_wav::_sub_frame_buf_id = 0;
 int            spdif_rec_wav::_adaptive_blank_level = spdif_rec_wav::BLANK_LEVEL;
@@ -48,6 +52,7 @@ bool           spdif_rec_wav::_auto_blank_split = true;
 bool           spdif_rec_wav::_support_rf64_wav = false;
 bool           spdif_rec_wav::_verbose = false;
 queue_t        spdif_rec_wav::_spdif_queue;
+queue_t        spdif_rec_wav::_log_queue;
 queue_t        spdif_rec_wav::_record_cmd_queue;
 queue_t        spdif_rec_wav::_error_queue;
 
@@ -115,6 +120,22 @@ void spdif_rec_wav::process_wav_file_cmd()
     wav_file_cmd::process_wav_file_cmd();
 }
 
+void spdif_rec_wav::process_log_file()
+{
+    // write log messages and suffix info requested by both cores on core0 instead of the requester itself
+    // not to block core1 by FATFS access (e.g. at the moment of split)
+    static log_entry_t entry;  // static not to consume stack (called only from core0)
+    if (!_log_ready) return;
+    while (queue_try_remove(&_log_queue, &entry)) {
+        _write_log_entry(entry);
+    }
+    const int suffix = _suffix_to_store;
+    if (suffix != _stored_suffix) {
+        _write_last_suffix(suffix);
+        _stored_suffix = suffix;
+    }
+}
+
 void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suffix_info_filename)
 {
     // Initialize class variables
@@ -134,13 +155,18 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
     int last_buf_id = 0;
 
     _suffix = _get_last_suffix() + 1;  // initial suffix to start from 1
+    _stored_suffix = _suffix - 1;
+    _suffix_to_store = _stored_suffix;
     sprintf(_log_filename, "%s%03d.txt", log_prefix, _suffix);
 
     // Initialize queues
     queue_init(&_spdif_queue, sizeof(sub_frame_buf_info_t), SPDIF_QUEUE_LENGTH);
     queue_init(&_record_cmd_queue, sizeof(record_cmd_data_t), RECORD_CMD_QUEUE_LENGTH);
     queue_init(&_error_queue, sizeof(_error_packet_t), ERROR_QUEUE_LENGTH);
+    queue_init(&_log_queue, sizeof(log_entry_t), LOG_QUEUE_LENGTH);
     wav_file_status::initialize();
+    __compiler_memory_barrier();  // _stored_suffix and _log_queue must be ready before core0 sees _log_ready
+    _log_ready = true;
 
     printf("spdif_rec_wav process started\r\n");
 
@@ -221,7 +247,7 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
             if (_verbose) {
                 printf("wav bw required:  %7.2f KB/s\r\n", static_cast<float>((static_cast<uint32_t>(bits_per_sample))*sample_freq*2/8) / 1e3);
             }
-            _set_last_suffix(_suffix);
+            _suffix_to_store = _suffix;  // written on core0 (process_log_file) not to block core1 by FATFS access
 
             while (true) {
                 uint queue_level = queue_get_level(&_spdif_queue);
@@ -404,50 +430,28 @@ void spdif_rec_wav::report_error(const error_type_t type, const uint32_t param)
 
 void spdif_rec_wav::log_printf(const char* fmt, ...)
 {
-    // work area is static for each core not to consume stack (log file access is deep in FATFS calls)
+    // print on serial immediately and request core0 to write on log file (see process_log_file)
+    // work area is static for each core not to consume stack
     // log_printf can be called from both cores at the same time, but never from IRQ (see _push_sub_frame_buf)
-    static constexpr int LOG_PRINTF_BUFF_SIZE = 512;
-    static struct {
-        char buff[LOG_PRINTF_BUFF_SIZE];
-        FIL  fil;
-    } work[NUM_CORES];
-    char* const buff = work[get_core_num()].buff;
-    FIL* const fil = &work[get_core_num()].fil;
+    static log_entry_t work[NUM_CORES];
+    log_entry_t& entry = work[get_core_num()];
     va_list va;
 
     // variable arg processing
     va_start(va, fmt);
-    vsnprintf(buff, LOG_PRINTF_BUFF_SIZE, fmt, va);
+    vsnprintf(entry.text, sizeof(entry.text), fmt, va);
     va_end(va);
 
     // print on serial
-    printf("%s", buff);
+    printf("%s", entry.text);
 
-    // print on log file
-    for ( ; ; ) {
-        FRESULT fr;
-        UINT bw;
-
-        // File create mode:
-        //  FA_CREATE_ALWAYS: Creates a new file. If the file is existing, it will be truncated and overwritten.
-        //  FA_OPEN_ALWAYS: Opens the file if it is existing. If not, a new file will be created.
-        //  FA_OPEN_APPEND: Same as FA_OPEN_ALWAYS except the read/write pointer is set end of the file.
-        if (_clear_log) {
-            fr = f_open(fil, _log_filename, FA_WRITE | FA_CREATE_ALWAYS);
-            if (fr != FR_OK) break;
-        } else {
-            fr = f_open(fil, _log_filename, FA_WRITE | FA_OPEN_APPEND);
-            if (fr != FR_OK) break;
-        }
-        fr = f_write(fil, buff, strnlen(buff, LOG_PRINTF_BUFF_SIZE), &bw);
-        if (fr != FR_OK || bw != strnlen(buff, LOG_PRINTF_BUFF_SIZE)) break;
-        fr = f_close(fil);
-        if (fr != FR_OK) break;
-
-        return;
+    // request to print on log file
+    entry.create = _clear_log;
+    strncpy(entry.filename, _log_filename, sizeof(entry.filename) - 1);
+    entry.filename[sizeof(entry.filename) - 1] = '\0';
+    if (!_log_ready || !queue_try_add(&_log_queue, &entry)) {
+        printf("ERROR: printing on log file skipped\r\n");
     }
-
-    printf("ERROR: printing on log file failed\r\n");
 }
 
 void spdif_rec_wav::_push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count)
@@ -503,24 +507,98 @@ int spdif_rec_wav::_get_last_suffix()
     return 0;
 }
 
-void spdif_rec_wav::_set_last_suffix(int suffix)
+bool spdif_rec_wav::_wait_core0_grant_unless_idle()
 {
-    static FIL fil;  // static not to consume stack (called only from core1)
-    FRESULT fr;
-    char buff[16];
-    UINT bw;
+    // wait for core0 grant while standby or recording (core1 doesn't send grant when idle, then no need to wait)
+    return wav_file_status::blocking_wait_core0_grant_while([]() { return _standby_flag || _recording_flag; });
+}
+
+void spdif_rec_wav::_write_log_entry(const log_entry_t& entry)
+{
+    // log file is kept open not to search directory by f_open every time
+    // (f_open takes long when there are many files in the directory)
+    static FIL  _log_fil;  // static not to consume stack (called only from core0)
+    static bool _log_fil_opened = false;
+    static char _log_fil_name[LOG_FILENAME_SIZE] = {};
 
     for ( ; ; ) {
-        fr = f_open(&fil, _suffix_info_filename, FA_WRITE | FA_CREATE_ALWAYS);
+        FRESULT fr;
+        UINT bw;
+        const UINT len = strnlen(entry.text, sizeof(entry.text));
+
+        // (re)open log file only when necessary
+        // File create mode:
+        //  FA_CREATE_ALWAYS: Creates a new file. If the file is existing, it will be truncated and overwritten.
+        //  FA_OPEN_APPEND: Opens the file if it is existing (If not, a new file will be created) and the read/write pointer is set end of the file.
+        if (entry.create || !_log_fil_opened || strncmp(_log_fil_name, entry.filename, sizeof(_log_fil_name)) != 0) {
+            if (_log_fil_opened) {
+                _wait_core0_grant_unless_idle();
+                f_close(&_log_fil);
+                _log_fil_opened = false;
+            }
+            _wait_core0_grant_unless_idle();
+            fr = f_open(&_log_fil, entry.filename, FA_WRITE | (entry.create ? FA_CREATE_ALWAYS : FA_OPEN_APPEND));
+            if (fr != FR_OK) break;
+            _log_fil_opened = true;
+            strncpy(_log_fil_name, entry.filename, sizeof(_log_fil_name));
+        }
+        _wait_core0_grant_unless_idle();
+        fr = f_write(&_log_fil, entry.text, len, &bw);
+        if (fr != FR_OK || bw != len) break;
+        // f_sync doesn't search directory because the position of directory entry is kept in FIL
+        _wait_core0_grant_unless_idle();
+        fr = f_sync(&_log_fil);
         if (fr != FR_OK) break;
-        sprintf(buff, "%d", suffix);
-        fr = f_write(&fil, buff, strnlen(buff, sizeof(buff)), &bw);
-        if (fr != FR_OK || bw != strnlen(buff, sizeof(buff))) break;
-        fr = f_close(&fil);
-        if (fr != FR_OK) break;
+
         return;
     }
 
+    if (_log_fil_opened) {
+        f_close(&_log_fil);
+        _log_fil_opened = false;
+    }
+    printf("ERROR: printing on log file failed\r\n");
+}
+
+void spdif_rec_wav::_write_last_suffix(const int suffix)
+{
+    // suffix info file is kept open not to search directory by f_open every time
+    static FIL  _suffix_fil;  // static not to consume stack (called only from core0)
+    static bool _suffix_fil_opened = false;
+    char buff[16];
+    sprintf(buff, "%d", suffix);
+    const UINT len = strnlen(buff, sizeof(buff));
+
+    for ( ; ; ) {
+        FRESULT fr;
+        UINT bw;
+
+        if (!_suffix_fil_opened) {
+            _wait_core0_grant_unless_idle();
+            fr = f_open(&_suffix_fil, _suffix_info_filename, FA_WRITE | FA_OPEN_ALWAYS);
+            if (fr != FR_OK) break;
+            _suffix_fil_opened = true;
+        }
+        _wait_core0_grant_unless_idle();
+        fr = f_lseek(&_suffix_fil, 0);
+        if (fr != FR_OK) break;
+        _wait_core0_grant_unless_idle();
+        fr = f_write(&_suffix_fil, buff, len, &bw);
+        if (fr != FR_OK || bw != len) break;
+        _wait_core0_grant_unless_idle();
+        fr = f_truncate(&_suffix_fil);  // remove the rest of previous longer value
+        if (fr != FR_OK) break;
+        _wait_core0_grant_unless_idle();
+        fr = f_sync(&_suffix_fil);
+        if (fr != FR_OK) break;
+
+        return;
+    }
+
+    if (_suffix_fil_opened) {
+        f_close(&_suffix_fil);
+        _suffix_fil_opened = false;
+    }
     report_error(error_type_t::SUFFIX_FILE_FAIL);
 }
 

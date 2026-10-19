@@ -27,6 +27,20 @@ void wav_file_status::blocking_wait_core0_grant()
     }
 }
 
+bool wav_file_status::blocking_wait_core0_grant_while(bool (*cond)())
+{
+    // wait for core0 grant only while cond() is true (return false without grant when it becomes false)
+    // to avoid deadlock when core1 stops sending grant (e.g. recording ends)
+    drain_core0_grant();
+    while (queue_is_empty(&_core0_grant_queue)) {
+        if (!(*cond)()) return false;
+        if (_wait_grant_func != nullptr) {
+            (*_wait_grant_func)();
+        }
+    }
+    return true;
+}
+
 void wav_file_status::drain_core0_grant()
 {
     // don't use while (!queue_is_empty) loop because it could drain grants which come after

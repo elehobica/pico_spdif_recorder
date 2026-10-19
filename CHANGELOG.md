@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 * Fix audio gap and pre-roll corruption at recording start by preparing the first WAV file at standby start
 * Fix FATFS work area declared as local variable of mount function, which kept being referred to after mount
 * Fix WAV data size not aligned to sample frame when trailing blank is truncated
+* Fix audio gaps around WAV file split (e.g. at 4 GB limit) when many files exist in the directory, by writing log file and suffix info file on core0 with the files kept open instead of opening them on core1 at the split
 
 ## [1.0.7] - 2026-10-17
 ### Changed

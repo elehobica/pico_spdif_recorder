@@ -28,6 +28,7 @@ public:
     // functions called from core0
     static void set_wait_grant_func(void (*func)());
     static void blocking_wait_core0_grant();
+    static bool blocking_wait_core0_grant_while(bool (*cond)());
     static void drain_core0_grant();
     static void send_core0_grant();
     // functions called from core1

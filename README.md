@@ -159,6 +159,10 @@ $ make -j4
 
 <img src="doc/samsung-pro-plus-256gb.jpg" width="80" /> <img src="doc/kioxia_exceria_g2_256g.jpg" width="80" /> <img src="doc/sandisk-extreme-pro-256gb.jpg" width="80" />
 
+### Number of files in root directory
+* All files are recorded in the root directory. Opening or creating a file takes longer as the number of files in the directory increases, because the directory is searched linearly, and it gradually reduces the margin against audio gaps.
+* To keep WAV file split (auto blank split, manual split and split at 4 GB) completely gapless, it is recommended to keep the number of files in the root directory 200 or less. Move or delete recorded files from the card regularly.
+
 ### File timestamp
 * File timestamp is synchronized to NTP if using Raspberry Pi Pico W and connected to Wi-Fi.
 * Otherwise, timestamp starts from 0:00 a.m. Jan. 1st, 2024 (UTC+0).

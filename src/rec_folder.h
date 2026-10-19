@@ -9,7 +9,7 @@
 #include "ff.h"
 
 // rec_folder is helper class (prohibited to instantiate) to decide the folder to record at boot
-// (called only from core0 before core1 starts)
+// and to change current directory to it (called only from core0 before core1 starts)
 class rec_folder final
 {
 public:

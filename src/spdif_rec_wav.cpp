@@ -105,8 +105,9 @@ bool spdif_rec_wav::get_verbose()
 void spdif_rec_wav::set_folder(const int folder_num)
 {
     // must be called before core1 starts
+    // log file is in current directory (folder to record, see rec_folder)
     _folder_num = folder_num;
-    snprintf(_log_filename, sizeof(_log_filename), "%03d/log_%03d.txt", _folder_num, _folder_num);
+    snprintf(_log_filename, sizeof(_log_filename), "log_%03d.txt", _folder_num);
 }
 
 int spdif_rec_wav::get_folder()

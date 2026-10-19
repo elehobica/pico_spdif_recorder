@@ -16,7 +16,7 @@ class wav_file
 {
 public:
     // === Public class constants ===
-    static constexpr int MAX_PATH_LEN = 32;  // max length of wav file path including folder
+    static constexpr int MAX_PATH_LEN = 32;  // max length of wav file path (relative to current directory)
 
     // === Public class functions ===
     // functions called from core0

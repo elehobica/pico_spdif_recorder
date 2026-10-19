@@ -60,23 +60,36 @@ bool rec_folder::setup(int& folder_num)
     }
 
     // recreate the last folder if empty to clear deleted entries in it, otherwise make a new folder
+    char name[FOLDER_NAME_SIZE];
+    bool made = false;
     if (last_folder > 0) {
-        char name[FOLDER_NAME_SIZE];
         snprintf(name, sizeof(name), "%03d", last_folder);
         if (_is_empty(name)) {
             if (_remove(name) && _make(last_folder, folder_num)) {
                 printf("recreated empty folder \"%s\" to record\r\n", name);
-                return true;
+                made = true;
+            } else {
+                printf("WARNING: failed to recreate empty folder \"%s\"\r\n", name);
             }
-            printf("WARNING: failed to recreate empty folder \"%s\"\r\n", name);
         }
     }
-    if (_make(n, folder_num)) {
+    if (!made) {
+        if (!_make(n, folder_num)) {
+            printf("ERROR: failed to create folder \"%03d\"\r\n", n);
+            return false;
+        }
         printf("created folder \"%03d\" to record\r\n", folder_num);
-        return true;
     }
-    printf("ERROR: failed to create folder \"%03d\"\r\n", n);
-    return false;
+
+    // change current directory to the folder to open files by relative path without searching root directory
+    // (current directory is common to both cores and must not be changed after core1 starts)
+    snprintf(name, sizeof(name), "%03d", folder_num);
+    fr = f_chdir(name);
+    if (fr != FR_OK) {
+        printf("ERROR: failed to change directory to \"%s\" (%d)\r\n", name, fr);
+        return false;
+    }
+    return true;
 }
 
 /*--------------------------/

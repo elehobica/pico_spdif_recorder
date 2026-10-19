@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Changed
 * Ignore S/PDIF input above 96 KHz (176.4 KHz and 192.0 KHz) as no signal by `spdif_rx_set_max_samp_freq()` of updated pico_spdif_rx
 * Record files in a new folder created at every power-on (`001`, `002`, ...) to keep the directory search short without formatting the card (the last folder is recreated if empty)
+  * The folder is set as the current directory to open files without searching the root directory
   * WAV file name is changed to `<folder>/<folder>_record_<suffix>.wav` with the suffix starting from 1 at every power-on, and log file name to `<folder>/log_<folder>.txt`
   * `last_suffix.txt` is no longer used
 * Sort WAV files in natural order in wav_tagger (e.g. `record_999.wav` before `record_1000.wav`)

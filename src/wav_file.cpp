@@ -131,8 +131,8 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
     _sync_pending(false)
 {
     const int folder_num = spdif_rec_wav::get_folder();
-    char wav_filename[MAX_PATH_LEN + 1];
-    if (snprintf(wav_filename, sizeof(wav_filename), "%03d/%03d_record_%03d.wav", folder_num, folder_num, suffix) > MAX_PATH_LEN) {
+    char wav_filename[MAX_PATH_LEN + 1];  // in current directory (folder to record)
+    if (snprintf(wav_filename, sizeof(wav_filename), "%03d_record_%03d.wav", folder_num, suffix) > MAX_PATH_LEN) {
         spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_PATH_TOO_LONG);
         return;
     }

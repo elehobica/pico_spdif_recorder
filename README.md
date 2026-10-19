@@ -169,6 +169,7 @@ $ make -j4
 * Opening or creating a file takes longer as the number of files in the directory increases, because the directory is searched linearly, and it gradually reduces the margin against audio gaps.
   Deleted files also keep making the search longer until the directory is newly created (or the card is formatted).
 * Because files are recorded in a new folder for each power-on, the search is kept short without formatting the card.
+  The folder is set as the current directory, so the root directory is not searched while recording even if many files (or deleted files) are left in it.
 * To keep WAV file split (auto blank split, manual split and split at 4 GB) completely gapless, it is recommended to keep the number of files in a folder (in a single power-on session) 200 or less. If more files are expected, power off and on to record in a new folder.
 
 ### File timestamp

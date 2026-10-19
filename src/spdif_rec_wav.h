@@ -34,7 +34,7 @@ public:
         WAV_DATA_WRITE_FAIL,
         WAV_DATA_SYNC_FAIL,
         WAV_CLOSE_FAIL,
-        SUFFIX_FILE_FAIL
+        WAV_PATH_TOO_LONG
     };
 
     // === Public class constants ===
@@ -52,12 +52,14 @@ public:
     static bool get_support_rf64_wav();
     static void set_verbose(const bool flag);
     static bool get_verbose();
+    static void set_folder(const int folder_num);
+    static int get_folder();
     static int get_suffix();
-    static void clear_suffix();
+    static bool take_wav_file_error();
     static void process_wav_file_cmd();
     static void process_log_file();
     // functions called from core1
-    static void record_process_loop(const char* log_prefix = "log_", const char* suffix_info_filename = "last_suffix.txt");
+    static void record_process_loop();
     // functions called from core0 and core1
     static void start_recording(const bits_per_sample_t bits_per_sample, const bool standby = false);
     static void end_recording(const bool immediate_split = false);
@@ -96,11 +98,9 @@ protected:
         int      buf_id;
         uint32_t sub_frame_count;
     } sub_frame_buf_info_t;
-    static constexpr int LOG_FILENAME_SIZE = 16;
+    static constexpr int LOG_FILENAME_SIZE = 32;
     static constexpr int LOG_TEXT_SIZE = 256;
     typedef struct _log_entry_t {
-        bool create;  // create (truncate) log file instead of append
-        char filename[LOG_FILENAME_SIZE];
         char text[LOG_TEXT_SIZE];
     } log_entry_t;
 
@@ -120,21 +120,18 @@ protected:
     // functions called from core0
     static bool _wait_core0_grant_unless_idle();
     static void _write_log_entry(const log_entry_t& entry);
-    static void _write_last_suffix(const int suffix);
     // functions called from core1
     static void _handle_errors();
+    static void _notify_wav_file_error();
     static void _push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count);
-    static int _get_last_suffix();
     static blank_status_t _scan_blank(const uint32_t* buff, const uint32_t sub_frame_count, const uint32_t sample_freq);
 
     // === Private class variables ===
-    static const char* _suffix_info_filename;
+    static int _folder_num;
     static int _suffix;
     static char _log_filename[LOG_FILENAME_SIZE];
-    static bool _clear_log;
     static volatile bool _log_ready;
-    static volatile int _suffix_to_store;  // requested by core1, written by core0
-    static int _stored_suffix;
+    static volatile bool _wav_file_error;  // set by core1, taken by core0
     static uint32_t _sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
     static int _sub_frame_buf_id;
     static int _adaptive_blank_level;

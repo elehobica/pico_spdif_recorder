@@ -117,9 +117,15 @@ $ make -j4
 | b | Auto blank split on/off (default: on) | Stored to flash (deferred until recording is stopped) |
 | f | RF64 WAV support on/off (default: off, only while not recording) | Stored to flash |
 | v | Verbose for monitoring messages | |
-| c | Clear WAV file suffix to 1 | |
 | w | Configure Wi-Fi (for Raspberry Pi Pico W only) | Stored to flash when Wi-Fi connection succeeds |
 | h | Help | |
+
+### Recording folder and file names
+* A new folder is created in the root directory at every power-on, and all files of the session are recorded in it.
+  * Folder name is a 3-digit (or more) number following the existing ones: `001`, `002`, ..., `999`, `1000`, ...
+  * If the last folder is empty (no file, or only WAV files of header size left by power-off during standby), it is deleted and recreated with the same number instead of creating a new one.
+* WAV file: `<folder>/<folder>_record_<suffix>.wav` (e.g. `004/004_record_001.wav`). The suffix starts from 1 at every power-on.
+* Log file: `<folder>/log_<folder>.txt` (e.g. `004/log_004.txt`)
 
 ### Recording start/stop/split features
 * Standby recording start while silence and auto start when sound detected
@@ -159,9 +165,11 @@ $ make -j4
 
 <img src="doc/samsung-pro-plus-256gb.jpg" width="80" /> <img src="doc/kioxia_exceria_g2_256g.jpg" width="80" /> <img src="doc/sandisk-extreme-pro-256gb.jpg" width="80" />
 
-### Number of files in root directory
-* All files are recorded in the root directory. Opening or creating a file takes longer as the number of files in the directory increases, because the directory is searched linearly, and it gradually reduces the margin against audio gaps.
-* To keep WAV file split (auto blank split, manual split and split at 4 GB) completely gapless, it is recommended to keep the number of files in the root directory 200 or less. Move or delete recorded files from the card regularly.
+### Number of files in a folder
+* Opening or creating a file takes longer as the number of files in the directory increases, because the directory is searched linearly, and it gradually reduces the margin against audio gaps.
+  Deleted files also keep making the search longer until the directory is newly created (or the card is formatted).
+* Because files are recorded in a new folder for each power-on, the search is kept short without formatting the card.
+* To keep WAV file split (auto blank split, manual split and split at 4 GB) completely gapless, it is recommended to keep the number of files in a folder (in a single power-on session) 200 or less. If more files are expected, power off and on to record in a new folder.
 
 ### File timestamp
 * File timestamp is synchronized to NTP if using Raspberry Pi Pico W and connected to Wi-Fi.

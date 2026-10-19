@@ -75,7 +75,7 @@ python wav_tagger.py <wav_directory> <metadata.yaml> <output_directory> [toleran
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `wav_directory` | Yes | Directory containing input WAV files |
+| `wav_directory` | Yes | Directory containing input WAV files (a recorded folder such as `004`, or a directory where the WAV files to process are copied) |
 | `metadata.yaml` | Yes | YAML file with album metadata |
 | `output_directory` | Yes | Directory for output files with ID3 tags |
 | `tolerance_seconds` | No | Tolerance in seconds (default: 3) |
@@ -191,7 +191,7 @@ If you're Claude user, import [spotify_metadata_extractor_SKILL.md](spotify_meta
 
 ### Processing Flow
 
-1. **Read WAV Files**: Scans the input directory for WAV files in alphabetical order
+1. **Read WAV Files**: Scans the input directory for WAV files in natural order (numbers in file names are compared as numbers, e.g. `004_record_999.wav` before `004_record_1000.wav`)
 2. **Compare Durations**: For each track, compares actual WAV duration with expected time from YAML
 3. **Automatic Processing**: If within tolerance (±3 seconds by default), processes automatically
 4. **Interactive Mode**: If outside tolerance, prompts user for action
@@ -282,6 +282,7 @@ The tool will report errors if:
 ### 1. Record with pico_spdif_recorder
 
 Record your album using the pico_spdif_recorder device. Use auto blank split feature to automatically separate tracks.
+WAV files are recorded in a folder created at every power-on (e.g. `004/004_record_001.wav`). Specify the folder (or a directory where the WAV files of the album are copied) as the input directory.
 
 ### 2. Create Metadata YAML
 

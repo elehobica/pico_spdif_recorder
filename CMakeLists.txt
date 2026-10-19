@@ -35,6 +35,7 @@ add_executable(${PROJECT_NAME}
     src/wav_file_status.cpp
     src/wav_file_cmd.cpp
     src/wav_file.cpp
+    src/rec_folder.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE

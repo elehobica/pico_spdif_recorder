@@ -58,6 +58,7 @@ public:
     void report_start();
     void report_final();
     bool is_data_written();
+    bool is_opened() const;
     bool is_sync_required();
 
     // === Public member variables ===

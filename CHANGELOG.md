@@ -13,12 +13,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 * Add RF64 WAV and `JUNK` chunk support to wav_tagger (`wav_io.py`), and copy audio data in blocks to handle huge WAV files
 ### Changed
 * Ignore S/PDIF input above 96 KHz (176.4 KHz and 192.0 KHz) as no signal by `spdif_rx_set_max_samp_freq()` of updated pico_spdif_rx
+* Record files in a new folder created at every power-on (`001`, `002`, ...) to keep the directory search short without formatting the card (the last folder is recreated if empty)
+  * WAV file name is changed to `<folder>/<folder>_record_<suffix>.wav` with the suffix starting from 1 at every power-on, and log file name to `<folder>/log_<folder>.txt`
+  * `last_suffix.txt` is no longer used
+* Sort WAV files in natural order in wav_tagger (e.g. `record_999.wav` before `record_1000.wav`)
+### Removed
+* Remove `c` command (clear WAV file suffix) because the suffix starts from 1 in a new folder at every power-on
 ### Fixed
 * Fix audio gap at the beginning of next file after splitting large WAV file (e.g. at 4 GB limit) caused by long FATFS blocking in finalize
 * Fix audio gap and pre-roll corruption at recording start by preparing the first WAV file at standby start
 * Fix FATFS work area declared as local variable of mount function, which kept being referred to after mount
 * Fix WAV data size not aligned to sample frame when trailing blank is truncated
-* Fix audio gaps around WAV file split (e.g. at 4 GB limit) when many files exist in the directory, by writing log file and suffix info file on core0 with the files kept open instead of opening them on core1 at the split
+* Fix audio gaps around WAV file split (e.g. at 4 GB limit) when many files exist in the directory, by writing log file on core0 with the file kept open instead of opening log file and suffix info file on core1 at the split
+* Fix writing to WAV file which failed to be created (e.g. `f_open` error), and stop recording (or standby) with error LED indication instead
 
 ## [1.0.7] - 2026-10-17
 ### Changed

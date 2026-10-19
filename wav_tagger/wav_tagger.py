@@ -206,7 +206,7 @@ def process_album(wav_dir: str, yaml_path: str, output_dir: str, tolerance: int 
     processor = WavProcessor(tolerance_seconds=tolerance)
     
     # Get list of WAV files
-    wav_files = sorted([f for f in os.listdir(wav_dir) if f.endswith('.wav')])
+    wav_files = sorted([f for f in os.listdir(wav_dir) if f.endswith('.wav')], key=wav_io.natural_key)
     if not wav_files:
         print("No WAV files found in the directory.")
         return

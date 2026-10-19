@@ -14,6 +14,7 @@ Audio data is copied in blocks without loading whole file on memory to handle hu
 """
 
 import os
+import re
 import shutil
 import struct
 from dataclasses import dataclass
@@ -25,6 +26,11 @@ WAVE_FORMAT_PCM = 0x0001
 WAVE_FORMAT_EXTENSIBLE = 0xFFFE
 RIFF_MAX_SIZE = 0xFFFFFFFF  # max value of 32-bit size field
 COPY_BLOCK_BYTES = 4 * 1024 * 1024  # block size to copy audio data
+
+
+def natural_key(name: str) -> list:
+    """Sort key comparing digit parts as numbers (e.g. 'record_999.wav' < 'record_1000.wav')"""
+    return [int(t) if t.isdigit() else t for t in re.split(r'(\d+)', name)]
 
 
 @dataclass

@@ -208,7 +208,7 @@ def preprocess_wavs(wav_dir: str, metadata: Dict, temp_dir: str,
     Returns list of (wav_path, track_metadata) tuples ready for conversion.
     """
     processor = WavProcessor(tolerance_seconds=tolerance)
-    wav_files = sorted([f for f in os.listdir(wav_dir) if f.endswith('.wav')])
+    wav_files = sorted([f for f in os.listdir(wav_dir) if f.endswith('.wav')], key=wav_io.natural_key)
 
     if not wav_files:
         print("No WAV files found in the directory.")
@@ -516,7 +516,7 @@ Examples:
     if args.skip_preprocess:
         print("\n[Phase 1] Skipping WAV preprocessing")
         processor = WavProcessor(tolerance_seconds=args.tolerance)
-        wav_files = sorted([f for f in os.listdir(args.wav_dir) if f.endswith('.wav')])
+        wav_files = sorted([f for f in os.listdir(args.wav_dir) if f.endswith('.wav')], key=wav_io.natural_key)
         tracks = metadata['tracks']
 
         if len(wav_files) != len(tracks):

@@ -153,6 +153,11 @@ bool wav_file_status::is_data_written()
     return _wav_file->is_data_written();
 }
 
+bool wav_file_status::is_opened() const
+{
+    return _wav_file != nullptr && _wav_file->is_opened();
+}
+
 bool wav_file_status::is_sync_required()
 {
     return _wav_file->is_sync_required();

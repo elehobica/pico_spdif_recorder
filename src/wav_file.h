@@ -16,6 +16,7 @@ class wav_file
 {
 public:
     // === Public class constants ===
+    static constexpr int MAX_PATH_LEN = 32;  // max length of wav file path including folder
 
     // === Public class functions ===
     // functions called from core0
@@ -36,12 +37,12 @@ public:
     void report_start() const;
     void report_final() const;
     bool is_data_written() const;
+    bool is_opened() const;
 
 protected:
     // === Private class constants ===
     static constexpr int NUM_CHANNELS = spdif_rec_wav::NUM_CHANNELS;
     static constexpr int NUM_SUB_FRAME_BUF = spdif_rec_wav::NUM_SUB_FRAME_BUF;
-    static constexpr const char* WAV_PREFIX = "record_";
     static constexpr int WAV_HEADER_SIZE = wav_header::WAV_HEADER_SIZE;
     static constexpr uint32_t MAX_TOTAL_BYTES = 0xfff00000;  // max total bytes of wav data to avoid 32bit overflow
     static constexpr int64_t SEEK_STEP_BYTES = 10 * 1024 * 1024;  // 10MB
@@ -67,6 +68,7 @@ protected:
 
     // === Private member variables ===
     FIL                     _fil;
+    bool                    _opened;
     std::string             _filename;
     const uint32_t          _sample_freq;
     const bits_per_sample_t _bits_per_sample;

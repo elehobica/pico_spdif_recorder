@@ -113,6 +113,7 @@ uint32_t wav_file::_wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
 /-----------------*/
 wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample) :
     _fil(),
+    _opened(false),
     _filename(),
     _sample_freq(sample_freq),
     _bits_per_sample(bits_per_sample),
@@ -129,8 +130,12 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
     _next_sync_bytes(PERIODIC_SYNC_BYTES),
     _sync_pending(false)
 {
-    char wav_filename[16];
-    sprintf(wav_filename, "%s%03d.wav", WAV_PREFIX, suffix);
+    const int folder_num = spdif_rec_wav::get_folder();
+    char wav_filename[MAX_PATH_LEN + 1];
+    if (snprintf(wav_filename, sizeof(wav_filename), "%03d/%03d_record_%03d.wav", folder_num, folder_num, suffix) > MAX_PATH_LEN) {
+        spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_PATH_TOO_LONG);
+        return;
+    }
     _filename = std::string(wav_filename);
 
     _drain_core0_grant();
@@ -141,6 +146,7 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
 
         fr = _wrap_f_open(&_fil, _filename.c_str(), FA_WRITE | FA_CREATE_ALWAYS);
         if (fr != FR_OK) break;
+        _opened = true;
 
         // RF64 is available only on exFAT because FAT32 limits file size to 4 GiB - 1
         _rf64_reserved = _rf64_requested && _fil.obj.fs->fs_type == FS_EXFAT;
@@ -154,6 +160,12 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
         return;
     }
 
+    // remove broken file and treat as not opened
+    if (_opened) {
+        _wrap_f_close(&_fil);
+        _wrap_f_unlink(_filename.c_str());
+        _opened = false;
+    }
     spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_OPEN_FAIL);
 }
 
@@ -162,6 +174,7 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
 /-----------------*/
 wav_file::~wav_file()
 {
+    if (!_opened) return;  // no access to FIL not opened
     _drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
@@ -340,6 +353,11 @@ void wav_file::report_final() const
 bool wav_file::is_data_written() const
 {
     return _data_written;
+}
+
+bool wav_file::is_opened() const
+{
+    return _opened;
 }
 
 /*--------------------------/

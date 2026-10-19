@@ -20,6 +20,7 @@
 #include "version.h"
 #include "ff.h"
 #include "ntp_client.h"
+#include "rec_folder.h"
 #include "spdif_rx.h"
 #include "spdif_rec_wav.h"
 #include "tf_card.h"
@@ -40,7 +41,9 @@ enum class main_error_t {
     NTP_ERROR,
     FATFS_ERROR,
     FLASH_PROGRAM_ERROR,
-    MAIN_LOOP_ABORTED_ERROR
+    MAIN_LOOP_ABORTED_ERROR,
+    REC_FOLDER_ERROR,
+    WAV_FILE_ERROR
 };
 
 static repeating_timer_t timer;
@@ -216,6 +219,7 @@ static void _show_help(const bits_per_sample_t bits_per_sample)
     printf(" auto blank split: %s\r\n", spdif_rec_wav::get_auto_blank_split() ? "on" : "off");
     printf(" RF64 WAV:         %s\r\n", spdif_rec_wav::get_support_rf64_wav() ? "on" : "off");
     printf(" verbose:          %s\r\n", spdif_rec_wav::get_verbose() ? "on" : "off");
+    printf(" folder to rec:    %03d\r\n", spdif_rec_wav::get_folder());
     printf(" suffix to rec:    %03d\r\n", spdif_rec_wav::get_suffix());
     printf("---------------------------\r\n");
     printf("[serial interface help]\r\n");
@@ -225,7 +229,6 @@ static void _show_help(const bits_per_sample_t bits_per_sample)
     printf(" 'b' to toggle auto blank split (*3)\r\n");
     printf(" 'f' to toggle RF64 WAV (*2)\r\n");
     printf(" 'v' to toggle verbose\r\n");
-    printf(" 'c' to clear suffix (*2)\r\n");
     if (picoW) {
         printf(" 'w' to configure wifi (*2)\r\n");
     }
@@ -470,6 +473,14 @@ int main()
         return 1;
     }
 
+    // folder to record for this boot
+    int folder_num;
+    if (!rec_folder::setup(folder_num)) {
+        _led_disp_error(main_error_t::REC_FOLDER_ERROR, true);
+        return 1;
+    }
+    spdif_rec_wav::set_folder(folder_num);
+
     spdif_rec_wav::set_auto_blank_split(cfgParam.P_CFG_AUTO_BLANK_SPLIT.get());
     spdif_rec_wav::set_support_rf64_wav(cfgParam.P_CFG_SUPPORT_RF64_WAV.get());
     spdif_rec_wav::set_wait_grant_func(_led_blink_during_wait);
@@ -503,6 +514,13 @@ int main()
                     _led_disp_error(main_error_t::FLASH_PROGRAM_ERROR);
                 }
             }
+        }
+        // recording (or standby) stopped by core1 because wav file couldn't be created
+        if (spdif_rec_wav::take_wav_file_error()) {
+            wait_sync = false;
+            user_standy = false;
+            standby_repeat = false;
+            _led_disp_error(main_error_t::WAV_FILE_ERROR);
         }
         if (stable_flg) {
             stable_flg = false;
@@ -589,11 +607,6 @@ int main()
                 bool verbose = !spdif_rec_wav::get_verbose();
                 spdif_rec_wav::set_verbose(verbose);
                 printf("verbose: %s\r\n", verbose ? "on" : "off");
-            } else if (c == 'c') {
-                if (!spdif_rec_wav::is_standby() && !spdif_rec_wav::is_recording()) {
-                    spdif_rec_wav::clear_suffix();
-                    printf("suffix to rec: %03d\r\n", spdif_rec_wav::get_suffix());
-                }
             } else if (c == 'w' && picoW) {
                 if (!spdif_rec_wav::is_standby() && !spdif_rec_wav::is_recording()) {
                     std::string ssid, pass;

@@ -170,7 +170,8 @@ $ make -j4
   Deleted files also keep making the search longer until the directory is newly created (or the card is formatted).
 * Because files are recorded in a new folder for each power-on, the search is kept short without formatting the card.
   The folder is set as the current directory, so the root directory is not searched while recording even if many files (or deleted files) are left in it.
-* To keep WAV file split (auto blank split, manual split and split at 4 GB) completely gapless, it is recommended to keep the number of files in a folder (in a single power-on session) 200 or less. If more files are expected, power off and on to record in a new folder.
+* As a guideline, keep the number of files recorded in a single power-on session (in a folder) 200 or less. Beyond that, audio gaps may occur at WAV file split (auto blank split, manual split and split at 4 GB) because the search in the folder becomes longer.
+  If more files are expected in continuous operation, it is recommended to power off and on at a convenient time, so that a new folder is created automatically.
 
 ### File timestamp
 * File timestamp is synchronized to NTP if using Raspberry Pi Pico W and connected to Wi-Fi.

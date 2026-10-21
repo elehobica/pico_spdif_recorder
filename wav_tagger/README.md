@@ -9,6 +9,7 @@ A Python tool for processing WAV files recorded by [pico_spdif_recorder](../READ
 - **Smart Merge/Split**: Merges short files or splits long files to match expected track durations
 - **ID3v2.3 Tags**: Adds proper ID3v2.3 metadata tags (not RIFF tags) with UTF-8 encoding
 - **Multi-language Support**: Full UTF-8 support for Japanese, Korean, and other languages in metadata
+- **RF64 Support**: Reads standard WAV (RIFF, including 80 bytes header with `JUNK` chunk) and RF64 WAV over 4 GB recorded by pico_spdif_recorder
 
 ## Installation
 
@@ -74,7 +75,7 @@ python wav_tagger.py <wav_directory> <metadata.yaml> <output_directory> [toleran
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `wav_directory` | Yes | Directory containing input WAV files |
+| `wav_directory` | Yes | Directory containing input WAV files (a recorded folder such as `004`, or a directory where the WAV files to process are copied) |
 | `metadata.yaml` | Yes | YAML file with album metadata |
 | `output_directory` | Yes | Directory for output files with ID3 tags |
 | `tolerance_seconds` | No | Tolerance in seconds (default: 3) |
@@ -190,7 +191,7 @@ If you're Claude user, import [spotify_metadata_extractor_SKILL.md](spotify_meta
 
 ### Processing Flow
 
-1. **Read WAV Files**: Scans the input directory for WAV files in alphabetical order
+1. **Read WAV Files**: Scans the input directory for WAV files in natural order (numbers in file names are compared as numbers, e.g. `004_record_999.wav` before `004_record_1000.wav`)
 2. **Compare Durations**: For each track, compares actual WAV duration with expected time from YAML
 3. **Automatic Processing**: If within tolerance (±3 seconds by default), processes automatically
 4. **Interactive Mode**: If outside tolerance, prompts user for action
@@ -260,6 +261,9 @@ Each output WAV file contains:
 
 ### WAV File Compatibility
 
+- **Input Formats**: Standard WAV (RIFF) with any additional chunks such as `JUNK` and `LIST`, and RF64 WAV (EBU Tech 3306) with `ds64` chunk
+- **Output Formats**: Standard WAV (RIFF) with 44 bytes header, or RF64 WAV if the merged/split audio data exceeds 4 GB
+- **Large Files**: Audio data is copied in blocks without loading whole file on memory (implemented in `wav_io.py`, which must be placed in the same directory)
 - **Merging**: Requires matching parameters (sample rate, bit depth, channels)
 - **Splitting**: Done at frame boundaries to maintain audio integrity
 - **ID3 Tags**: Prepended to WAV file (standard practice for ID3 in WAV)
@@ -278,6 +282,7 @@ The tool will report errors if:
 ### 1. Record with pico_spdif_recorder
 
 Record your album using the pico_spdif_recorder device. Use auto blank split feature to automatically separate tracks.
+WAV files are recorded in a folder created at every power-on (e.g. `004/004_record_001.wav`). Specify the folder (or a directory where the WAV files of the album are copied) as the input directory.
 
 ### 2. Create Metadata YAML
 

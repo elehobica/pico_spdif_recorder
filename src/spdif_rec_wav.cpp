@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cstdarg>
 
+#include "ff.h"
 #include "wav_file_status.h"
 #include "wav_file_cmd.h"
 
@@ -31,10 +32,11 @@ static inline uint64_t _micros()
 /*-----------------/
 /  Class variables
 /-----------------*/
-const char*    spdif_rec_wav::_suffix_info_filename;
-int            spdif_rec_wav::_suffix;
-char           spdif_rec_wav::_log_filename[16];
-bool           spdif_rec_wav::_clear_log;
+int            spdif_rec_wav::_folder_num = 0;
+int            spdif_rec_wav::_suffix = 1;
+char           spdif_rec_wav::_log_filename[spdif_rec_wav::LOG_FILENAME_SIZE];
+volatile bool  spdif_rec_wav::_log_ready = false;
+volatile bool  spdif_rec_wav::_wav_file_error = false;
 uint32_t       spdif_rec_wav::_sub_frame_buf[SPDIF_BLOCK_SIZE * NUM_SUB_FRAME_BUF];
 int            spdif_rec_wav::_sub_frame_buf_id = 0;
 int            spdif_rec_wav::_adaptive_blank_level = spdif_rec_wav::BLANK_LEVEL;
@@ -45,8 +47,10 @@ float          spdif_rec_wav::_blank_scan_sec = 0.0f;
 bool           spdif_rec_wav::_standby_flag = false;
 bool           spdif_rec_wav::_recording_flag = false;
 bool           spdif_rec_wav::_auto_blank_split = true;
+bool           spdif_rec_wav::_support_rf64_wav = false;
 bool           spdif_rec_wav::_verbose = false;
 queue_t        spdif_rec_wav::_spdif_queue;
+queue_t        spdif_rec_wav::_log_queue;
 queue_t        spdif_rec_wav::_record_cmd_queue;
 queue_t        spdif_rec_wav::_error_queue;
 
@@ -78,6 +82,16 @@ bool spdif_rec_wav::get_auto_blank_split()
     return _auto_blank_split;
 }
 
+void spdif_rec_wav::set_support_rf64_wav(const bool flag)
+{
+    _support_rf64_wav = flag;
+}
+
+bool spdif_rec_wav::get_support_rf64_wav()
+{
+    return _support_rf64_wav;
+}
+
 void spdif_rec_wav::set_verbose(const bool flag)
 {
     _verbose = flag;
@@ -88,15 +102,29 @@ bool spdif_rec_wav::get_verbose()
     return _verbose;
 }
 
+void spdif_rec_wav::set_folder(const int folder_num)
+{
+    // must be called before core1 starts
+    // log file is in current directory (folder to record, see rec_folder)
+    _folder_num = folder_num;
+    snprintf(_log_filename, sizeof(_log_filename), "log_%03d.txt", _folder_num);
+}
+
+int spdif_rec_wav::get_folder()
+{
+    return _folder_num;
+}
+
 int spdif_rec_wav::get_suffix()
 {
     return _suffix;
 }
 
-void spdif_rec_wav::clear_suffix()
+bool spdif_rec_wav::take_wav_file_error()
 {
-    _suffix = 1;
-    _clear_log = true;
+    if (!_wav_file_error) return false;
+    _wav_file_error = false;
+    return true;
 }
 
 void spdif_rec_wav::process_wav_file_cmd()
@@ -104,13 +132,23 @@ void spdif_rec_wav::process_wav_file_cmd()
     wav_file_cmd::process_wav_file_cmd();
 }
 
-void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suffix_info_filename)
+void spdif_rec_wav::process_log_file()
+{
+    // write log messages requested by both cores on core0 instead of the requester itself
+    // not to block core1 by FATFS access (e.g. at the moment of split)
+    static log_entry_t entry;  // static not to consume stack (called only from core0)
+    if (!_log_ready) return;
+    while (queue_try_remove(&_log_queue, &entry)) {
+        _write_log_entry(entry);
+    }
+}
+
+void spdif_rec_wav::record_process_loop()
 {
     // Initialize class variables
-    _suffix_info_filename = suffix_info_filename;
     _standby_flag = false;
     _recording_flag = false;
-    _clear_log = true;
+    _suffix = 1;
 
     // Local variables for this loop
     uint32_t sample_freq;
@@ -122,14 +160,14 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
     int buf_accum = 0;
     int last_buf_id = 0;
 
-    _suffix = _get_last_suffix() + 1;  // initial suffix to start from 1
-    sprintf(_log_filename, "%s%03d.txt", log_prefix, _suffix);
-
     // Initialize queues
     queue_init(&_spdif_queue, sizeof(sub_frame_buf_info_t), SPDIF_QUEUE_LENGTH);
     queue_init(&_record_cmd_queue, sizeof(record_cmd_data_t), RECORD_CMD_QUEUE_LENGTH);
     queue_init(&_error_queue, sizeof(_error_packet_t), ERROR_QUEUE_LENGTH);
+    queue_init(&_log_queue, sizeof(log_entry_t), LOG_QUEUE_LENGTH);
     wav_file_status::initialize();
+    __compiler_memory_barrier();  // _log_queue must be ready before core0 sees _log_ready
+    _log_ready = true;
 
     printf("spdif_rec_wav process started\r\n");
 
@@ -147,8 +185,13 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
             bits_per_sample = static_cast<bits_per_sample_t>(record_cmd_data.param[1]);
 
             if (record_cmd_data.cmd == record_cmd_type_t::STANDBY_START_CMD) {
+                // prepare file in advance not to block recording start when sound detected
+                if (next.is_equal_status(wav_file_status::status_t::RESET)) {
+                    next.req_prepare(_suffix, sample_freq, bits_per_sample);
+                }
                 _standby_flag = true;
                 while (true) {
+                    wav_file_status::send_core0_grant();  // core0 can access file anytime during standby
                     if (!queue_is_empty(&_spdif_queue)) {
                         sub_frame_buf_info_t buf_info;
                         // check blank status
@@ -177,6 +220,16 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 // check cancel of standby
                 if (record_cmd_data.cmd == record_cmd_type_t::END_CMD || record_cmd_data.cmd == record_cmd_type_t::END_FOR_SPLIT_CMD) {
                     _standby_flag = false;
+                    // dispose the file prepared for standby (removed because of no samples)
+                    // not to reuse it with obsolete sample_freq or bits_per_sample at next start
+                    if (!next.is_equal_status(wav_file_status::status_t::RESET)) {
+                        next.wait_status(wav_file_status::status_t::PREPARED);
+                        const bool opened = next.is_opened();
+                        next.req_finalize(false);
+                        next.wait_status(wav_file_status::status_t::FINALIZED);
+                        next.reset();
+                        if (!opened) _notify_wav_file_error();
+                    }
                     continue;
                 }
             }
@@ -185,20 +238,35 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                 next.req_prepare(_suffix, sample_freq, bits_per_sample);
             }
             next.wait_status(wav_file_status::status_t::PREPARED);
+            if (!next.is_opened()) {
+                // stop standby / recording because wav file couldn't be created (e.g. path too long)
+                // (at split, previous file is already requested to finalize)
+                next.req_finalize(false);
+                next.wait_status(wav_file_status::status_t::FINALIZED);
+                next.reset();
+                _standby_flag = false;
+                _recording_flag = false;
+                // drain remained spdif queue because no file to write
+                while (!queue_is_empty(&_spdif_queue)) {
+                    sub_frame_buf_info_t buf_info;
+                    queue_remove_blocking(&_spdif_queue, &buf_info);
+                    last_buf_id = (buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF;
+                }
+                buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE*0];
+                buf_accum = 0;
+                _notify_wav_file_error();
+                continue;
+            }
             cur = next;
             next.reset();
 
             _recording_flag = true;
             _standby_flag = false;
-            if (_clear_log) sprintf(_log_filename, "%s%03d.txt", log_prefix, _suffix);
             cur.report_start();
-            _clear_log = false;
 
             if (_verbose) {
                 printf("wav bw required:  %7.2f KB/s\r\n", static_cast<float>((static_cast<uint32_t>(bits_per_sample))*sample_freq*2/8) / 1e3);
             }
-            _set_last_suffix(_suffix);
-
             while (true) {
                 uint queue_level = queue_get_level(&_spdif_queue);
                 cur.record_queue_ratio(static_cast<float>(queue_level) / SPDIF_QUEUE_LENGTH);
@@ -228,6 +296,9 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
                         if (queue_level == 1 || buf_info.buf_id >= NUM_SUB_FRAME_BUF - 1 || buf_accum >= NUM_SUB_FRAME_BUF/2) {
                             uint32_t sub_frame_count = buf_info.sub_frame_count * buf_accum;
                             cur.write(buf_ptr, sub_frame_count);
+                            if (cur.is_sync_required()) {
+                                cur.req_sync();  // f_sync on core0 when granted
+                            }
                             // update head of buffer to write
                             buf_ptr = &_sub_frame_buf[SPDIF_BLOCK_SIZE * ((buf_info.buf_id + 1) % NUM_SUB_FRAME_BUF)];
                             buf_accum = 0;
@@ -266,6 +337,9 @@ void spdif_rec_wav::record_process_loop(const char* log_prefix, const char* suff
 
             if (record_cmd_data.cmd == record_cmd_type_t::END_CMD) {
                 _recording_flag = false;
+                // note: finalize with truncate of large file (e.g. RF64 over 4 GB) could take long (about 0.84 sec for 20 GB),
+                // and samples are not captured until standby restarts after it. therefore, if sound restarts
+                // just after blank skip, the beginning of the next file could be lost (see wav_file destructor)
                 prev.wait_status(wav_file_status::status_t::FINALIZED);
                 if (next.is_equal_status(wav_file_status::status_t::PREPARED)) {
                     next.req_finalize(false);
@@ -352,14 +426,21 @@ void spdif_rec_wav::_handle_errors()
         case error_type_t::WAV_CLOSE_FAIL:
             log_printf("ERROR: wav file close failed\r\n");
             break;
-        case error_type_t::SUFFIX_FILE_FAIL:
-            log_printf("ERROR: suffix file failed\r\n");
+        case error_type_t::WAV_PATH_TOO_LONG:
+            log_printf("ERROR: wav file path too long\r\n");
             break;
         default:
             log_printf("ERROR: unknown error\r\n");
             break;
         }
     }
+}
+
+void spdif_rec_wav::_notify_wav_file_error()
+{
+    _handle_errors();
+    log_printf("ERROR: recording stopped because wav file couldn't be created\r\n");
+    _wav_file_error = true;  // to be taken by core0
 }
 
 void spdif_rec_wav::report_error(const error_type_t type, const uint32_t param)
@@ -374,43 +455,25 @@ void spdif_rec_wav::report_error(const error_type_t type, const uint32_t param)
 
 void spdif_rec_wav::log_printf(const char* fmt, ...)
 {
-    char buff[512];
+    // print on serial immediately and request core0 to write on log file (see process_log_file)
+    // work area is static for each core not to consume stack
+    // log_printf can be called from both cores at the same time, but never from IRQ (see _push_sub_frame_buf)
+    static log_entry_t work[NUM_CORES];
+    log_entry_t& entry = work[get_core_num()];
     va_list va;
 
     // variable arg processing
     va_start(va, fmt);
-    vsprintf(buff, fmt, va);
+    vsnprintf(entry.text, sizeof(entry.text), fmt, va);
     va_end(va);
 
     // print on serial
-    printf(buff);
+    printf("%s", entry.text);
 
-    // print on log file
-    for ( ; ; ) {
-        FIL fil;
-        FRESULT fr;
-        UINT bw;
-
-        // File create mode:
-        //  FA_CREATE_ALWAYS: Creates a new file. If the file is existing, it will be truncated and overwritten.
-        //  FA_OPEN_ALWAYS: Opens the file if it is existing. If not, a new file will be created.
-        //  FA_OPEN_APPEND: Same as FA_OPEN_ALWAYS except the read/write pointer is set end of the file.
-        if (_clear_log) {
-            fr = f_open(&fil, _log_filename, FA_WRITE | FA_CREATE_ALWAYS);
-            if (fr != FR_OK) break;
-        } else {
-            fr = f_open(&fil, _log_filename, FA_WRITE | FA_OPEN_APPEND);
-            if (fr != FR_OK) break;
-        }
-        fr = f_write(&fil, buff, strnlen(buff, sizeof(buff)), &bw);
-        if (fr != FR_OK || bw != strnlen(buff, sizeof(buff))) break;
-        fr = f_close(&fil);
-        if (fr != FR_OK) break;
-
-        return;
+    // request to print on log file
+    if (!_log_ready || !queue_try_add(&_log_queue, &entry)) {
+        printf("ERROR: printing on log file skipped\r\n");
     }
-
-    printf("ERROR: printing on log file failed\r\n");
 }
 
 void spdif_rec_wav::_push_sub_frame_buf(const uint32_t* buff, const uint32_t sub_frame_count)
@@ -444,47 +507,48 @@ void spdif_rec_wav::_push_sub_frame_buf(const uint32_t* buff, const uint32_t sub
     }
 }
 
-int spdif_rec_wav::_get_last_suffix()
+bool spdif_rec_wav::_wait_core0_grant_unless_idle()
 {
-    FIL fil;
-    FRESULT fr;
-    char buff[16];
-    UINT br;
-    int suffix;
-
-    for ( ; ; ) {
-        fr = f_open(&fil, _suffix_info_filename, FA_READ | FA_OPEN_EXISTING);
-        if (fr != FR_OK) break;
-        fr = f_read(&fil, buff, sizeof(buff), &br);
-        if (fr != FR_OK && br > 0) break;
-        suffix = atoi(buff);
-        fr = f_close(&fil);
-        if (fr != FR_OK) break;
-        return suffix;
-    }
-    // no suffix info file or error
-    return 0;
+    // wait for core0 grant while standby or recording (core1 doesn't send grant when idle, then no need to wait)
+    return wav_file_status::blocking_wait_core0_grant_while([]() { return _standby_flag || _recording_flag; });
 }
 
-void spdif_rec_wav::_set_last_suffix(int suffix)
+void spdif_rec_wav::_write_log_entry(const log_entry_t& entry)
 {
-    FIL fil;
-    FRESULT fr;
-    char buff[16];
-    UINT bw;
+    // log file is kept open not to search directory by f_open every time
+    // (f_open takes long when there are many files in the directory)
+    static FIL  _log_fil;  // static not to consume stack (called only from core0)
+    static bool _log_fil_opened = false;
 
     for ( ; ; ) {
-        fr = f_open(&fil, _suffix_info_filename, FA_WRITE | FA_CREATE_ALWAYS);
+        FRESULT fr;
+        UINT bw;
+        const UINT len = strnlen(entry.text, sizeof(entry.text));
+
+        // open log file only at the first message (or after error)
+        //  FA_OPEN_APPEND: Opens the file if it is existing (If not, a new file will be created) and the read/write pointer is set end of the file.
+        if (!_log_fil_opened) {
+            _wait_core0_grant_unless_idle();
+            fr = f_open(&_log_fil, _log_filename, FA_WRITE | FA_OPEN_APPEND);
+            if (fr != FR_OK) break;
+            _log_fil_opened = true;
+        }
+        _wait_core0_grant_unless_idle();
+        fr = f_write(&_log_fil, entry.text, len, &bw);
+        if (fr != FR_OK || bw != len) break;
+        // f_sync doesn't search directory because the position of directory entry is kept in FIL
+        _wait_core0_grant_unless_idle();
+        fr = f_sync(&_log_fil);
         if (fr != FR_OK) break;
-        sprintf(buff, "%d", suffix);
-        fr = f_write(&fil, buff, strnlen(buff, sizeof(buff)), &bw);
-        if (fr != FR_OK || bw != strnlen(buff, sizeof(buff))) break;
-        fr = f_close(&fil);
-        if (fr != FR_OK) break;
+
         return;
     }
 
-    report_error(error_type_t::SUFFIX_FILE_FAIL);
+    if (_log_fil_opened) {
+        f_close(&_log_fil);
+        _log_fil_opened = false;
+    }
+    printf("ERROR: printing on log file failed\r\n");
 }
 
 spdif_rec_wav::blank_status_t spdif_rec_wav::_scan_blank(const uint32_t* buff, const uint32_t sub_frame_count, const uint32_t sample_freq)

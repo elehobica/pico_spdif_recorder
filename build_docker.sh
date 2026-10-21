@@ -26,17 +26,24 @@ Targets:
 Options:
   -h, --help     Show this help
   -k, --keep     Keep build directory contents (incremental build)
+  -s, --sync-interval MBYTES
+                 Periodic f_sync interval of wav file in MB (default: 64, 0 = disabled)
 EOF
 }
 
 TARGET=all
 KEEP=0
+SYNC_MBYTES=
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     pico|pico2|all) TARGET="$1" ;;
     -h|--help)      usage; exit 0 ;;
     -k|--keep)      KEEP=1 ;;
+    -s|--sync-interval)
+      shift
+      if [[ ! "$1" =~ ^[0-9]+$ ]]; then echo "Invalid sync interval: $1" >&2; usage; exit 1; fi
+      SYNC_MBYTES="$1" ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
   shift
@@ -66,18 +73,23 @@ run_build() {
 }
 
 BUILT_DIRS=()
+if [[ -n "$SYNC_MBYTES" ]]; then
+  CMAKE_OPT="-DPERIODIC_SYNC_MBYTES=$SYNC_MBYTES"
+else
+  CMAKE_OPT="-UPERIODIC_SYNC_MBYTES"  # clear cached value to use default
+fi
 
 case "$TARGET" in
   pico|all)
     echo "===== Build Pico (rp2040) ====="
-    run_build build ""
+    run_build build "$CMAKE_OPT"
     BUILT_DIRS+=(build)
     ;;
 esac
 case "$TARGET" in
   pico2|all)
     echo "===== Build Pico 2 (rp2350) ====="
-    run_build build2 "-DPICO_PLATFORM=rp2350 -DPICO_BOARD=pico2"
+    run_build build2 "-DPICO_PLATFORM=rp2350 -DPICO_BOARD=pico2 $CMAKE_OPT"
     BUILT_DIRS+=(build2)
     ;;
 esac

@@ -35,6 +35,7 @@ add_executable(${PROJECT_NAME}
     src/wav_file_status.cpp
     src/wav_file_cmd.cpp
     src/wav_file.cpp
+    src/rec_folder.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -53,6 +54,12 @@ target_link_libraries(${PROJECT_NAME}
     pico_stdlib
     picow_config_wifi
 )
+
+# periodic f_sync interval in MB to write FAT chain gradually (default: 64 in wav_file.h, 0: disabled)
+if(DEFINED PERIODIC_SYNC_MBYTES)
+    message(STATUS "PERIODIC_SYNC_MBYTES=${PERIODIC_SYNC_MBYTES}")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE PERIODIC_SYNC_MBYTES=${PERIODIC_SYNC_MBYTES}u)
+endif()
 
 pico_enable_stdio_usb(${PROJECT_NAME} 1)
 pico_enable_stdio_uart(${PROJECT_NAME} 0)

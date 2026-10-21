@@ -47,6 +47,17 @@ bool wav_file_cmd::req_finalize(wav_file_status& wfs, const bool report_flag, co
     return _req_wav_file_cmd(cmd_data);
 }
 
+bool wav_file_cmd::req_sync(wav_file_status& wfs)
+{
+    wav_file_cmd_data_t cmd_data;
+    cmd_data.cmd = wav_file_cmd_type_t::SYNC;
+    cmd_data.wfs = &wfs;
+    cmd_data.param[0] = 0L;
+    cmd_data.param[1] = 0L;
+    cmd_data.param[2] = 0L;
+    return _req_wav_file_cmd(cmd_data);
+}
+
 void wav_file_cmd::process_wav_file_cmd()
 {
     while (!queue_is_empty(&_wav_file_cmd_queue)) {
@@ -57,10 +68,12 @@ void wav_file_cmd::process_wav_file_cmd()
             command->_execute();
             delete command;
         }
-        {  // set status as done
-            wav_file_status* wfs = cmd_data.wfs;
-            const wav_file_status::status_t status = _cmd_to_done_status.at(cmd_data.cmd);
-            wfs->set_status(status);
+        {  // set status as done (sync command doesn't change status)
+            const auto it = _cmd_to_done_status.find(cmd_data.cmd);
+            if (it != _cmd_to_done_status.end()) {
+                wav_file_status* wfs = cmd_data.wfs;
+                wfs->set_status(it->second);
+            }
         }
     }
 }
@@ -72,6 +85,8 @@ wav_file_cmd* wav_file_cmd::_parse(wav_file_cmd_data_t& cmd_data)
         inst = new prepare(cmd_data);
     } else if (cmd_data.cmd == wav_file_cmd_type_t::FINALIZE) {
         inst = new finalize(cmd_data);
+    } else if (cmd_data.cmd == wav_file_cmd_type_t::SYNC) {
+        inst = new periodic_sync(cmd_data);
     } else {
         inst = new nop(cmd_data);
     }
@@ -81,10 +96,12 @@ wav_file_cmd* wav_file_cmd::_parse(wav_file_cmd_data_t& cmd_data)
 bool wav_file_cmd::_req_wav_file_cmd(wav_file_cmd_data_t& cmd_data)
 {
     if (queue_try_add(&_wav_file_cmd_queue, &cmd_data)) {
-        // set status as requested
-        wav_file_status* wfs = cmd_data.wfs;
-        const wav_file_status::status_t status = _cmd_to_req_status.at(cmd_data.cmd);
-        wfs->set_status(status);
+        // set status as requested (sync command doesn't change status)
+        const auto it = _cmd_to_req_status.find(cmd_data.cmd);
+        if (it != _cmd_to_req_status.end()) {
+            wav_file_status* wfs = cmd_data.wfs;
+            wfs->set_status(it->second);
+        }
         return true;
     } else {
         spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_FILE_CMD_QUEUE_FULL, static_cast<uint32_t>(cmd_data.cmd));
@@ -146,5 +163,20 @@ bool finalize::_execute()
     bool report_flag = static_cast<bool>(_cmd_data.param[0]);
     float truncate_sec = *(reinterpret_cast<float*>(&_cmd_data.param[1]));
     wfs->finalize(report_flag, truncate_sec);
+    return true;
+}
+
+/*--------------------------/
+/  periodic sync command
+/--------------------------*/
+periodic_sync::periodic_sync(wav_file_cmd_data_t& cmd_data) :
+    wav_file_cmd(cmd_data)
+{
+}
+
+bool periodic_sync::_execute()
+{
+    wav_file_status* wfs = _cmd_data.wfs;
+    wfs->sync();
     return true;
 }

@@ -115,16 +115,34 @@ $ make -j4
 | r | Resolution change 16bit/24bit (default: 16bit) | Set by BIT_RES switch at power-on |
 | s | Manual split | |
 | b | Auto blank split on/off (default: on) | Stored to flash (deferred until recording is stopped) |
+| f | RF64 WAV support on/off (default: off, only while not recording) | Stored to flash |
 | v | Verbose for monitoring messages | |
-| c | Clear WAV file suffix to 1 | |
 | w | Configure Wi-Fi (for Raspberry Pi Pico W only) | Stored to flash when Wi-Fi connection succeeds |
 | h | Help | |
+
+### Recording folder and file names
+* A new folder is created in the root directory at every power-on, and all files of the session are recorded in it.
+  * Folder name is a 3-digit (or more) number following the existing ones: `001`, `002`, ..., `999`, `1000`, ...
+  * If the last folder is empty (no file, or only WAV files of header size left by power-off during standby), it is deleted and recreated with the same number instead of creating a new one.
+* WAV file: `<folder>/<folder>_record_<suffix>.wav` (e.g. `004/004_record_001.wav`). The suffix starts from 1 at every power-on.
+* Log file: `<folder>/log_<folder>.txt` (e.g. `004/log_004.txt`)
 
 ### Recording start/stop/split features
 * Standby recording start while silence and auto start when sound detected
 * Auto stop and standby restart when long blank detected
 * Auto split of WAV file when short blank detected
 * Manual immediate split of WAV file without gap
+
+### WAV file size and RF64
+* Standard WAV (RIFF) file is limited to 4 GB because of its 32-bit size fields. (about 2 hours 4 minutes in 24bit 96.0 KHz)
+* RF64 WAV support off (default): WAV file is split immediately without gap before reaching 4 GB.
+* RF64 WAV support on: WAV file is not split by its size, and it is finalized as RF64 ([EBU Tech 3306](https://tech.ebu.ch/publications/tech3306)) only if it exceeds 4 GB.
+  * WAV file of 4 GB or less is standard WAV (RIFF) with 80 bytes header including `JUNK` chunk reserved for `ds64` chunk of RF64.
+    Most of software read it correctly, but software assuming fixed 44 bytes header may fail.
+  * RF64 WAV file can be read by RF64-aware software such as Audacity, ffmpeg, SoX and foobar2000.
+  * RF64 is available only on exFAT card. On FAT32 card, WAV file is split before reaching 4 GB as same as off (warning is shown in help and log)
+    because FAT32 file system limits file size to 4 GB.
+  * [WAV Tagger Tool](#wav-tagger-tool) supports both of them.
 
 ### LED indicator
 * Steady ON: Stand-by (ready to start recording).
@@ -146,6 +164,14 @@ $ make -j4
 | 3 | SanDisk | Extreme PRO 256GB | SDSQXCD-256G-GN6MA | 24bit/96KHz is stable. |
 
 <img src="doc/samsung-pro-plus-256gb.jpg" width="80" /> <img src="doc/kioxia_exceria_g2_256g.jpg" width="80" /> <img src="doc/sandisk-extreme-pro-256gb.jpg" width="80" />
+
+### Number of files in a folder
+* Opening or creating a file takes longer as the number of files in the directory increases, because the directory is searched linearly, and it gradually reduces the margin against audio gaps.
+  Deleted files also keep making the search longer until the directory is newly created (or the card is formatted).
+* Because files are recorded in a new folder for each power-on, the search is kept short without formatting the card.
+  The folder is set as the current directory, so the root directory is not searched while recording even if many files (or deleted files) are left in it.
+* As a guideline, keep the number of files recorded in a single power-on session (in a folder) 200 or less. Beyond that, audio gaps may occur at WAV file split (auto blank split, manual split and split at 4 GB) because the search in the folder becomes longer.
+  If more files are expected in continuous operation, it is recommended to power off and on at a convenient time, so that a new folder is created automatically.
 
 ### File timestamp
 * File timestamp is synchronized to NTP if using Raspberry Pi Pico W and connected to Wi-Fi.

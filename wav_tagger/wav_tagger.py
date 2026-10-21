@@ -8,11 +8,13 @@ and adds ID3v2.3 tags with UTF-8 encoding.
 """
 
 import os
+import shutil
 import struct
-import wave
 import yaml
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
+
+import wav_io
 
 
 # Constants
@@ -35,64 +37,43 @@ class WavProcessor:
         return minutes * 60 + seconds
     
     def get_wav_duration(self, filepath: str) -> float:
-        """Get duration of WAV file in seconds"""
-        with wave.open(filepath, 'rb') as wav:
-            frames = wav.getnframes()
-            rate = wav.getframerate()
-            return frames / float(rate)
-    
-    def read_wav_data(self, filepath: str) -> Tuple[bytes, tuple]:
-        """Read WAV file and return audio data and parameters"""
-        with wave.open(filepath, 'rb') as wav:
-            params = wav.getparams()
-            frames = wav.readframes(wav.getnframes())
-            return frames, params
+        """Get duration of WAV file (RIFF or RF64) in seconds"""
+        return wav_io.read_params(filepath).duration
     
     def merge_wav_files(self, filepaths: List[str], output_path: str) -> None:
-        """Merge multiple WAV files into one"""
+        """Merge multiple WAV files into one (RF64 if exceeding 4 GB)"""
         if not filepaths:
             raise ValueError("No files to merge")
-        
+
         # Read first file to get parameters
-        first_frames, params = self.read_wav_data(filepaths[0])
-        all_frames = [first_frames]
-        
+        params = wav_io.read_params(filepaths[0])
+        sources = [(filepaths[0], params.data_offset, params.data_size)]
+
         # Read remaining files and verify compatibility
         for filepath in filepaths[1:]:
-            frames, file_params = self.read_wav_data(filepath)
+            file_params = wav_io.read_params(filepath)
             if (file_params.nchannels != params.nchannels or
                 file_params.sampwidth != params.sampwidth or
                 file_params.framerate != params.framerate):
                 raise ValueError(f"WAV parameters mismatch in {filepath}")
-            all_frames.append(frames)
-        
+            sources.append((filepath, file_params.data_offset, file_params.data_size))
+
         # Write merged file
-        with wave.open(output_path, 'wb') as output:
-            output.setparams(params)
-            output.writeframes(b''.join(all_frames))
-    
-    def split_wav_file(self, filepath: str, split_time: float, 
-                      output1: str, output2: str) -> None:
+        wav_io.write_wav(output_path, params, sources)
+
+    def split_wav_file(self, filepath: str, split_time: float,
+                       output1: str, output2: str) -> None:
         """Split WAV file at specified time (in seconds)"""
-        with wave.open(filepath, 'rb') as wav:
-            params = wav.getparams()
-            frames = wav.readframes(wav.getnframes())
-            
-            # Calculate split point in bytes
-            frame_size = params.sampwidth * params.nchannels
-            split_frame = int(split_time * params.framerate)
-            split_byte = split_frame * frame_size
-            
-            # Write first part
-            with wave.open(output1, 'wb') as out1:
-                out1.setparams(params)
-                out1.writeframes(frames[:split_byte])
-            
-            # Write second part
-            with wave.open(output2, 'wb') as out2:
-                out2.setparams(params)
-                out2.writeframes(frames[split_byte:])
-    
+        params = wav_io.read_params(filepath)
+
+        # Calculate split point in bytes at frame boundary
+        split_frame = min(int(split_time * params.framerate), params.nframes)
+        split_byte = split_frame * params.frame_size
+
+        # Write first part and second part
+        wav_io.write_wav(output1, params, [(filepath, params.data_offset, split_byte)])
+        wav_io.write_wav(output2, params, [(filepath, params.data_offset + split_byte,
+                                            params.data_size - split_byte)])
     def create_id3v23_tag(self, metadata: Dict) -> bytes:
         """Create ID3v2.3 tag with UTF-8 encoding"""
         frames = []
@@ -144,14 +125,10 @@ class WavProcessor:
         # Create ID3 tag
         id3_tag = self.create_id3v23_tag(metadata)
         
-        # Read WAV file
-        with open(wav_path, 'rb') as f:
-            wav_data = f.read()
-        
-        # Write ID3 tag + WAV data
-        with open(output_path, 'wb') as f:
-            f.write(id3_tag)
-            f.write(wav_data)
+        # Write ID3 tag + WAV data (copied in blocks not to load huge file on memory)
+        with open(wav_path, 'rb') as src, open(output_path, 'wb') as dst:
+            dst.write(id3_tag)
+            shutil.copyfileobj(src, dst, wav_io.COPY_BLOCK_BYTES)
 
 
 def load_metadata(yaml_path: str) -> Dict:
@@ -229,7 +206,7 @@ def process_album(wav_dir: str, yaml_path: str, output_dir: str, tolerance: int 
     processor = WavProcessor(tolerance_seconds=tolerance)
     
     # Get list of WAV files
-    wav_files = sorted([f for f in os.listdir(wav_dir) if f.endswith('.wav')])
+    wav_files = sorted([f for f in os.listdir(wav_dir) if f.endswith('.wav')], key=wav_io.natural_key)
     if not wav_files:
         print("No WAV files found in the directory.")
         return
@@ -276,8 +253,7 @@ def process_album(wav_dir: str, yaml_path: str, output_dir: str, tolerance: int 
             temp_wav = temp_dir / f"track_{track_number:02d}.wav"
             
             # Copy file
-            with open(current_wav_path, 'rb') as src, open(temp_wav, 'wb') as dst:
-                dst.write(src.read())
+            wav_io.copy_file(current_wav_path, str(temp_wav))
             
             current_wav_idx += 1
         else:
@@ -312,8 +288,7 @@ def process_album(wav_dir: str, yaml_path: str, output_dir: str, tolerance: int 
                 # Use as is
                 print("  → Using current WAV as is")
                 temp_wav = temp_dir / f"track_{track_number:02d}.wav"
-                with open(current_wav_path, 'rb') as src, open(temp_wav, 'wb') as dst:
-                    dst.write(src.read())
+                wav_io.copy_file(current_wav_path, str(temp_wav))
                 current_wav_idx += 1
                 
             elif choice == 2:
@@ -356,8 +331,7 @@ def process_album(wav_dir: str, yaml_path: str, output_dir: str, tolerance: int 
                 temp_wav = temp_dir / f"track_{track_number:02d}.wav"
 
                 # Copy file
-                with open(current_wav_path, 'rb') as src, open(temp_wav, 'wb') as dst:
-                    dst.write(src.read())
+                wav_io.copy_file(current_wav_path, str(temp_wav))
 
                 # Create combined metadata (use combined track titles)
                 combined_titles = [metadata['tracks'][track_idx + i]['title']
@@ -408,7 +382,6 @@ def process_album(wav_dir: str, yaml_path: str, output_dir: str, tolerance: int 
         track_idx += 1
     
     # Cleanup temp directory
-    import shutil
     shutil.rmtree(temp_dir)
     
     print(f"\n{'='*60}")

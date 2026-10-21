@@ -28,6 +28,7 @@ public:
     // functions called from core0
     static void set_wait_grant_func(void (*func)());
     static void blocking_wait_core0_grant();
+    static bool blocking_wait_core0_grant_while(bool (*cond)());
     static void drain_core0_grant();
     static void send_core0_grant();
     // functions called from core1
@@ -43,6 +44,7 @@ public:
     // functions called from core0
     void prepare(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     void finalize(const bool report_flag, const float truncate_sec = 0.0f);
+    void sync();
     void set_status(status_t status);
     bool is_equal_status(status_t status) const;
     void wait_status(status_t status);
@@ -50,11 +52,14 @@ public:
     void reset();
     void req_prepare(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     void req_finalize(const bool report_flag, const float truncate_sec = 0.0f);
+    void req_sync();
     uint32_t write(const uint32_t* buff, const uint32_t sub_frame_count);
     void record_queue_ratio(float queue_ratio);
     void report_start();
     void report_final();
     bool is_data_written();
+    bool is_opened() const;
+    bool is_sync_required();
 
     // === Public member variables ===
 

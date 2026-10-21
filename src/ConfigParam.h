@@ -14,6 +14,7 @@ typedef enum {
     CFG_ID_WIFI_SSID = FlashParamNs::CFG_ID_BASE,
     CFG_ID_WIFI_PASS,
     CFG_ID_AUTO_BLANK_SPLIT,
+    CFG_ID_SUPPORT_RF64_WAV,
 } ParamId_t;
 
 //=================================
@@ -29,4 +30,5 @@ struct ConfigParam : FlashParamNs::FlashParam
     FlashParamNs::Parameter<std::string> P_CFG_WIFI_SSID        {CFG_ID_WIFI_SSID,        "CFG_WIFI_SSID",        "",      16};
     FlashParamNs::Parameter<std::string> P_CFG_WIFI_PASS        {CFG_ID_WIFI_PASS,        "CFG_WIFI_PASS",        "",      16};
     FlashParamNs::Parameter<bool>        P_CFG_AUTO_BLANK_SPLIT {CFG_ID_AUTO_BLANK_SPLIT, "CFG_AUTO_BLANK_SPLIT", true};
+    FlashParamNs::Parameter<bool>        P_CFG_SUPPORT_RF64_WAV {CFG_ID_SUPPORT_RF64_WAV, "CFG_SUPPORT_RF64_WAV", false};
 };

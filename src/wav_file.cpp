@@ -113,76 +113,59 @@ uint32_t wav_file::_wav_buf[SPDIF_BLOCK_SIZE*3/4 * NUM_SUB_FRAME_BUF / 2];
 /-----------------*/
 wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample) :
     _fil(),
+    _opened(false),
     _filename(),
     _sample_freq(sample_freq),
     _bits_per_sample(bits_per_sample),
+    _rf64_requested(spdif_rec_wav::get_support_rf64_wav()),
+    _rf64_reserved(false),
+    _header_size(WAV_HEADER_SIZE),
     _total_bytes(0),
     _total_time_us(0),
     _best_bandwidth(-INFINITY),
     _worst_bandwidth(INFINITY),
     _worst_queue_ratio(0.0f),
     _data_written(false),
-    _truncate_sec(0.0f)
+    _truncate_sec(0.0f),
+    _next_sync_bytes(PERIODIC_SYNC_BYTES),
+    _sync_pending(false)
 {
-    char wav_filename[16];
-    sprintf(wav_filename, "%s%03d.wav", WAV_PREFIX, suffix);
+    const int folder_num = spdif_rec_wav::get_folder();
+    char wav_filename[MAX_PATH_LEN + 1];  // in current directory (folder to record)
+    if (snprintf(wav_filename, sizeof(wav_filename), "%03d_record_%03d.wav", folder_num, suffix) > MAX_PATH_LEN) {
+        spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_PATH_TOO_LONG);
+        return;
+    }
     _filename = std::string(wav_filename);
 
     _drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
         UINT bw;
-        uint8_t buf[WAV_HEADER_SIZE];
-        uint16_t u16;
-        uint32_t u32;
+        uint8_t buf[wav_header::MAX_HEADER_SIZE];
 
         fr = _wrap_f_open(&_fil, _filename.c_str(), FA_WRITE | FA_CREATE_ALWAYS);
         if (fr != FR_OK) break;
+        _opened = true;
 
-        // ChunkID
-        memcpy(&buf[0], "RIFF", 4);
-        // ChunkSize (temporary 0)
-        memset(&buf[4], 0, 4);
-        // Format
-        memcpy(&buf[8], "WAVE", 4);
+        // RF64 is available only on exFAT because FAT32 limits file size to 4 GiB - 1
+        _rf64_reserved = _rf64_requested && _fil.obj.fs->fs_type == FS_EXFAT;
+        _header_size = wav_header::generate(buf, _sample_freq, static_cast<uint16_t>(_bits_per_sample), NUM_CHANNELS, _rf64_reserved, 0);
 
-        // Subchunk1ID
-        memcpy(&buf[12], "fmt ", 4);
-        // Subchunk1Size
-        u32 = 16;  // 16 for PCM
-        memcpy(&buf[16], (const void *) &u32, 4);
-        // AudioFormat
-        u16 = 1;  // PCM = 1
-        memcpy(&buf[20], (const void *) &u16, 2);
-        // NumChannels
-        u16 = 2;  // e.g. Stereo = 2
-        memcpy(&buf[22], (const void *) &u16, 2);
-        // SampleRate
-        u32 = _sample_freq;  // e.g. 44100
-        memcpy(&buf[24], (const void *) &u32, 4);
-        // ByteRate
-        u32 = _sample_freq * NUM_CHANNELS * (static_cast<uint16_t>(_bits_per_sample)/8);
-        memcpy(&buf[28], (const void *) &u32, 4);
-        // BlockAlign
-        u16 = NUM_CHANNELS * (static_cast<uint16_t>(_bits_per_sample)/8);
-        memcpy(&buf[32], (const void *) &u16, 2);
-        // BitsPerSample
-        u16 = static_cast<uint16_t>(_bits_per_sample);
-        memcpy(&buf[34], (const void *) &u16, 2);
-
-        // Subchunk2ID
-        memcpy(&buf[36], "data", 4);
-        // Subchunk2Size (temporary 0)
-        memset(&buf[40], 0, 4);
-
-        fr = _wrap_f_write(&_fil, buf, sizeof(buf), &bw);
-        if (fr != FR_OK || bw != sizeof(buf)) break;
+        fr = _wrap_f_write(&_fil, buf, _header_size, &bw);
+        if (fr != FR_OK || bw != _header_size) break;
         fr = _wrap_f_sync(&_fil);
         if (fr != FR_OK) break;
 
         return;
     }
 
+    // remove broken file and treat as not opened
+    if (_opened) {
+        _wrap_f_close(&_fil);
+        _wrap_f_unlink(_filename.c_str());
+        _opened = false;
+    }
     spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_OPEN_FAIL);
 }
 
@@ -191,6 +174,7 @@ wav_file::wav_file(const uint32_t suffix, const uint32_t sample_freq, const bits
 /-----------------*/
 wav_file::~wav_file()
 {
+    if (!_opened) return;  // no access to FIL not opened
     _drain_core0_grant();
     for ( ; ; ) {
         FRESULT fr;     /* FatFs return code */
@@ -202,13 +186,46 @@ wav_file::~wav_file()
 
             fr = _wrap_f_unlink(_filename.c_str());
             if (fr != FR_OK) break;
+        } else if (_rf64_reserved) {
+            UINT bw;
+            uint8_t buf[wav_header::MAX_HEADER_SIZE];
+
+            // note: truncate (trailing blank at blank skip or stop) takes time proportional to the file size
+            // because FATFS follows the whole cluster chain from the head twice, by backward seek and by f_truncate
+            // to check contiguity on exFAT (measured: about 0.84 sec in total for 20 GB file).
+            // recording doesn't break meanwhile because core1 waits for this finalize without recording,
+            // but restart of recording when sound is detected is delayed until it completes (see spdif_rec_wav)
+            if (_truncate_sec > 0.0f) {
+                uint64_t truncate_bytes = _get_truncate_bytes();
+                FSIZE_t cur_pos = _wrap_f_tell(&_fil) - truncate_bytes;
+                _total_bytes -= truncate_bytes;
+                fr = _stepwise_seek(cur_pos);
+                if (fr != FR_OK) break;
+                fr = _wrap_f_truncate(&_fil);
+                if (fr != FR_OK) break;
+            }
+
+            fr = _wrap_f_sync(&_fil);
+            if (fr != FR_OK) break;
+
+            // rewrite whole header at once as RIFF or RF64 depending on the size
+            // no need to seek back to the end because FAT chain is already filled by f_sync above (and f_lseek)
+            // and f_close doesn't depend on the file position
+            fr = _stepwise_seek(0);
+            if (fr != FR_OK) break;
+            int header_size = wav_header::generate(buf, _sample_freq, static_cast<uint16_t>(_bits_per_sample), NUM_CHANNELS, true, _total_bytes);
+            fr = _wrap_f_write(&_fil, buf, header_size, &bw);
+            if (fr != FR_OK || bw != header_size) break;
+
+            fr = _wrap_f_close(&_fil);
+            if (fr != FR_OK) break;
         } else {
             UINT bw;
             uint32_t u32;
-            DWORD cur_pos = _wrap_f_tell(&_fil);
+            FSIZE_t cur_pos = _wrap_f_tell(&_fil);
 
             if (_truncate_sec > 0.0f) {
-                uint32_t truncate_bytes = static_cast<uint32_t>(_truncate_sec * (static_cast<uint32_t>(_bits_per_sample)/8) * NUM_CHANNELS * _sample_freq);
+                uint64_t truncate_bytes = _get_truncate_bytes();
                 cur_pos -= truncate_bytes;
                 _total_bytes -= truncate_bytes;
                 fr = _stepwise_seek(cur_pos);
@@ -223,7 +240,7 @@ wav_file::~wav_file()
             // ChunkSize
             fr = _stepwise_seek(4);
             if (fr != FR_OK) break;
-            u32 = _total_bytes + (WAV_HEADER_SIZE - 8);
+            u32 = static_cast<uint32_t>(_total_bytes + (WAV_HEADER_SIZE - 8));
             fr = _wrap_f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
             if (fr != FR_OK || bw != sizeof(uint32_t)) break;
             fr = _wrap_f_sync(&_fil);
@@ -232,7 +249,7 @@ wav_file::~wav_file()
             // Subchunk2Size
             fr = _stepwise_seek(40);
             if (fr != FR_OK) break;
-            u32 = _total_bytes;
+            u32 = static_cast<uint32_t>(_total_bytes);
             fr = _wrap_f_write(&_fil, static_cast<const void *>(&u32), sizeof(uint32_t), &bw);
             if (fr != FR_OK || bw != sizeof(uint32_t)) break;
             fr = _wrap_f_sync(&_fil);
@@ -253,6 +270,23 @@ wav_file::~wav_file()
 /*--------------------------/
 /  Public Member functions
 /--------------------------*/
+void wav_file::sync()
+{
+    FRESULT fr = _wrap_f_sync(&_fil);
+    if (fr != FR_OK) {
+        spdif_rec_wav::report_error(spdif_rec_wav::error_type_t::WAV_DATA_SYNC_FAIL);
+    }
+    _sync_pending = false;
+}
+
+bool wav_file::is_sync_required()
+{
+    if (PERIODIC_SYNC_BYTES == 0 || _sync_pending || _total_bytes < _next_sync_bytes) return false;
+    _next_sync_bytes = _total_bytes + PERIODIC_SYNC_BYTES;
+    _sync_pending = true;
+    return true;
+}
+
 uint32_t wav_file::write(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     uint64_t start_time = _micros();
@@ -270,10 +304,13 @@ uint32_t wav_file::write(const uint32_t* buff, const uint32_t sub_frame_count)
     _total_time_us += t_us;
     _data_written = true;
 
-    // force immediate split to avoid 32bit file size overflow
-    if (_total_bytes > MAX_TOTAL_BYTES) {
+    // force immediate split to avoid 32bit file size overflow unless RF64
+    if (!_rf64_reserved && _total_bytes > MAX_TOTAL_BYTES) {
         spdif_rec_wav::split_recording(_bits_per_sample);
         spdif_rec_wav::log_printf("force immediate wav split due to file size\r\n");
+        if (_rf64_requested) {
+            spdif_rec_wav::log_printf("WARNING: forced split at 4 GB despite CFG_SUPPORT_RF64_WAV because of FAT32\r\n");
+        }
     }
 
     return bytes;
@@ -296,10 +333,11 @@ void wav_file::report_start() const
 
 void wav_file::report_final() const
 {
-    float total_sec_f = static_cast<float>(_total_bytes) / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS / _sample_freq - _truncate_sec;
+    double total_sec_f = static_cast<double>(_total_bytes) / (static_cast<uint32_t>(_bits_per_sample)/8) / NUM_CHANNELS / _sample_freq - _truncate_sec;
     uint32_t total_sec = static_cast<uint32_t>(total_sec_f);
     uint32_t total_sec_dp = static_cast<uint32_t>((total_sec_f - total_sec) * 1e3);
-    spdif_rec_wav::log_printf("recorded \"%s\" @ %d bits %5.1f KHz (%6.1f Kbps) total %lu bytes (time:  %d:%02d.%03d)\r\n", _filename.c_str(), _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3, _total_bytes + WAV_HEADER_SIZE, total_sec/60, total_sec%60, total_sec_dp);
+    const char* rf64_note = wav_header::is_rf64(_rf64_reserved, _total_bytes - _get_truncate_bytes()) ? " (RF64)" : "";
+    spdif_rec_wav::log_printf("recorded \"%s\"%s @ %d bits %5.1f KHz (%6.1f Kbps) total %llu bytes (time:  %d:%02d.%03d)\r\n", _filename.c_str(), rf64_note, _bits_per_sample, static_cast<float>(_sample_freq)*1e-3, static_cast<float>(_bits_per_sample)*_sample_freq*2*1e-3, _total_bytes + _header_size, total_sec/60, total_sec%60, total_sec_dp);
     if (spdif_rec_wav::get_verbose()) {
         float avg_bw = static_cast<float>(_total_bytes) / _total_time_us * 1e3;
         printf("SD Card writing bandwidth\r\n");
@@ -317,6 +355,11 @@ bool wav_file::is_data_written() const
     return _data_written;
 }
 
+bool wav_file::is_opened() const
+{
+    return _opened;
+}
+
 /*--------------------------/
 /  Protected class functions
 /--------------------------*/
@@ -324,13 +367,28 @@ bool wav_file::is_data_written() const
 /*-----------------------------/
 /  Protected Member functions
 /-----------------------------*/
-FRESULT wav_file::_stepwise_seek(const DWORD pos)
+uint64_t wav_file::_get_truncate_bytes() const
 {
-    FRESULT fr;     /* FatFs return code */
+    if (_truncate_sec <= 0.0f) return 0;
+    const uint32_t block_align = (static_cast<uint32_t>(_bits_per_sample)/8) * NUM_CHANNELS;
+    uint64_t truncate_bytes = static_cast<uint64_t>(_truncate_sec * block_align * _sample_freq);
+    truncate_bytes -= truncate_bytes % block_align;  // align to sample frame not to leave partial frame at the end of data
+    return (truncate_bytes < _total_bytes) ? truncate_bytes : _total_bytes;  // _total_bytes is always aligned
+}
+
+FRESULT wav_file::_stepwise_seek(const FSIZE_t pos)
+{
+    FRESULT fr = FR_OK;     /* FatFs return code */
 
     int64_t target_pos = static_cast<int64_t>(pos);
     int64_t cur_pos    = static_cast<int64_t>(_wrap_f_tell(&_fil));
     int64_t diff       = target_pos - cur_pos;
+
+    // backward seek: FATFS always follows the cluster chain from the head of the file,
+    // therefore stepwise seek doesn't reduce the time for each step, but multiplies the total time
+    if (diff < 0) {
+        return _wrap_f_lseek(&_fil, static_cast<FSIZE_t>(target_pos));
+    }
 
     while (cur_pos != target_pos) {
         if (diff >= 0) {
@@ -346,7 +404,7 @@ FRESULT wav_file::_stepwise_seek(const DWORD pos)
                 cur_pos = target_pos;
             }
         }
-        fr = _wrap_f_lseek(&_fil, static_cast<DWORD>(cur_pos));
+        fr = _wrap_f_lseek(&_fil, static_cast<FSIZE_t>(cur_pos));
         if (fr != FR_OK) break;
     }
     return fr;

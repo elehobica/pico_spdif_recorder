@@ -27,6 +27,20 @@ void wav_file_status::blocking_wait_core0_grant()
     }
 }
 
+bool wav_file_status::blocking_wait_core0_grant_while(bool (*cond)())
+{
+    // wait for core0 grant only while cond() is true (return false without grant when it becomes false)
+    // to avoid deadlock when core1 stops sending grant (e.g. recording ends)
+    drain_core0_grant();
+    while (queue_is_empty(&_core0_grant_queue)) {
+        if (!(*cond)()) return false;
+        if (_wait_grant_func != nullptr) {
+            (*_wait_grant_func)();
+        }
+    }
+    return true;
+}
+
 void wav_file_status::drain_core0_grant()
 {
     // don't use while (!queue_is_empty) loop because it could drain grants which come after
@@ -71,6 +85,11 @@ void wav_file_status::finalize(const bool report_flag, const float truncate_sec)
     _wav_file = nullptr;
 }
 
+void wav_file_status::sync()
+{
+    if (_wav_file != nullptr) _wav_file->sync();
+}
+
 void wav_file_status::set_status(status_t status)
 {
     _status = status;
@@ -104,6 +123,11 @@ void wav_file_status::req_finalize(const bool report_flag, const float truncate_
     wav_file_cmd::req_finalize(*this, report_flag, truncate_sec);
 }
 
+void wav_file_status::req_sync()
+{
+    wav_file_cmd::req_sync(*this);
+}
+
 uint32_t wav_file_status::write(const uint32_t* buff, const uint32_t sub_frame_count)
 {
     return _wav_file->write(buff, sub_frame_count);
@@ -127,4 +151,14 @@ void wav_file_status::report_final()
 bool wav_file_status::is_data_written()
 {
     return _wav_file->is_data_written();
+}
+
+bool wav_file_status::is_opened() const
+{
+    return _wav_file != nullptr && _wav_file->is_opened();
+}
+
+bool wav_file_status::is_sync_required()
+{
+    return _wav_file->is_sync_required();
 }

@@ -22,7 +22,8 @@ protected:
     // === Private definitions of class ===
     enum class wav_file_cmd_type_t {
         PREPARE = 0,
-        FINALIZE
+        FINALIZE,
+        SYNC
     };
     typedef struct _wav_file_cmd_data_t {
         wav_file_cmd_type_t cmd;
@@ -31,7 +32,7 @@ protected:
     } wav_file_cmd_data_t;
 
     // === Private class constants ===
-    static constexpr int WAV_FILE_CMD_QUEUE_LENGTH = 2;
+    static constexpr int WAV_FILE_CMD_QUEUE_LENGTH = 3;  // prepare, finalize and sync could be requested at the same time
     static const std::map<const wav_file_cmd_type_t, const wav_file_status::status_t> _cmd_to_req_status;
     static const std::map<const wav_file_cmd_type_t, const wav_file_status::status_t> _cmd_to_done_status;
 
@@ -44,6 +45,7 @@ public:
     static void initialize();
     static bool req_prepare(wav_file_status& wfs, const uint32_t suffix, const uint32_t sample_freq, const bits_per_sample_t bits_per_sample);
     static bool req_finalize(wav_file_status& wfs, const bool report_final, const float truncate_sec = 0.0f);
+    static bool req_sync(wav_file_status& wfs);
     // functions called from core0
     static void process_wav_file_cmd();
 
@@ -98,6 +100,17 @@ class finalize : public wav_file_cmd
 {
 public:
     finalize(wav_file_cmd_data_t& cmd_data);
+protected:
+    virtual bool _execute();
+};
+
+/*--------------------------/
+/  periodic sync command
+/--------------------------*/
+class periodic_sync : public wav_file_cmd
+{
+public:
+    periodic_sync(wav_file_cmd_data_t& cmd_data);
 protected:
     virtual bool _execute();
 };

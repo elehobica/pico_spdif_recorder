@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [1.1.0] - 2026-10-21
 ### Added
 * Add periodic `f_sync` of WAV file every 64 MB on core0 to write exFAT FAT chain gradually instead of at once in finalize (configurable by `PERIODIC_SYNC_MBYTES` or `-s` option of `build_docker.sh`, 0 to disable)
 * Add RF64 WAV support for WAV file over 4 GB on exFAT card as `CFG_SUPPORT_RF64_WAV` (default: off, toggled by `f` command)
